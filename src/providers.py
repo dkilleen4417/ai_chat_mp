@@ -1,0 +1,275 @@
+# providers.py - Complete provider architecture
+
+import google.generativeai as genai
+import requests
+import time
+import json
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+import streamlit as st
+
+
+class BaseProvider(ABC):
+    """Base class for all AI providers"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._client = None
+        self.initialize_client()
+    
+    @abstractmethod
+    def initialize_client(self):
+        """Initialize the provider's client"""
+        pass
+    
+    @abstractmethod
+    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
+        """Generate a chat response"""
+        pass
+    
+    @abstractmethod
+    def get_available_models(self) -> List[Dict]:
+        """Get list of available models for this provider"""
+        pass
+    
+    @abstractmethod
+    def validate_model_config(self, config: Dict) -> bool:
+        """Validate model configuration"""
+        pass
+    
+    @property
+    def provider_name(self) -> str:
+        """Return the provider name"""
+        return self.__class__.__name__.replace("Provider", "").lower()
+
+
+class GoogleProvider(BaseProvider):
+    """Provider for Google AI (Gemini) models"""
+    
+    def initialize_client(self):
+        """Initialize Google AI client"""
+        genai.configure(api_key=self.api_key)
+        self._client = genai
+    
+    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
+        """Generate response using Google AI"""
+        try:
+            # Create the generative model
+            model = genai.GenerativeModel(
+                model_name=model_config["name"],
+                generation_config={
+                    "temperature": model_config.get("temperature", 0.7),
+                    "top_p": model_config.get("top_p", 0.9),
+                    "max_output_tokens": model_config.get("max_output_tokens", 8192)
+                }
+            )
+            
+            # Convert messages to Google AI format
+            api_history = []
+            
+            # Add system prompt if exists
+            system_prompt = model_config.get("system_prompt", "")
+            if system_prompt:
+                api_history.append({"role": "user", "parts": [f"System Prompt: {system_prompt}"]})
+                api_history.append({"role": "model", "parts": ["Understood. I will follow those instructions."]})
+            
+            # Add conversation history
+            for msg in messages:
+                role = "model" if msg["role"] == "assistant" else "user"
+                api_history.append({"role": role, "parts": [msg["content"]]})
+            
+            # Add search results if provided
+            if search_results:
+                api_history.append({
+                    "role": "user",
+                    "parts": [f"Here are the search results to help you answer:\n\n{search_results}"]
+                })
+            
+            # Generate response
+            response = model.generate_content(api_history)
+            return response.text
+            
+        except Exception as e:
+            st.error(f"Google AI Error: {e}")
+            return "Sorry, I encountered an error while generating a response."
+    
+    def get_available_models(self) -> List[Dict]:
+        """Get available Google AI models"""
+        return [
+            {
+                "name": "gemini-2.0-flash-exp",
+                "provider": "google",
+                "display_name": "Gemini 2.0 Flash (Experimental)",
+                "capabilities": ["text", "vision", "tools"]
+            },
+            {
+                "name": "gemini-1.5-pro",
+                "provider": "google", 
+                "display_name": "Gemini 1.5 Pro",
+                "capabilities": ["text", "vision", "tools"]
+            },
+            {
+                "name": "gemini-1.5-flash",
+                "provider": "google",
+                "display_name": "Gemini 1.5 Flash", 
+                "capabilities": ["text", "vision", "tools"]
+            }
+        ]
+    
+    def validate_model_config(self, config: Dict) -> bool:
+        """Validate Google AI model configuration"""
+        required_fields = ["name", "provider", "temperature", "top_p"]
+        return all(field in config for field in required_fields)
+
+
+class AnthropicProvider(BaseProvider):
+    """Provider for Anthropic (Claude) models using direct HTTP requests"""
+    
+    def initialize_client(self):
+        """Initialize HTTP client"""
+        self._client = None
+    
+    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
+        """Generate response using Anthropic Claude via HTTP"""
+        try:
+            # API endpoint
+            url = "https://api.anthropic.com/v1/messages"
+            
+            # Headers
+            headers = {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+            
+            # Process messages
+            anthropic_messages = []
+            for msg in messages:
+                anthropic_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+            
+            # Add search results if provided
+            if search_results:
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": f"Here are the search results:\n\n{search_results}"
+                })
+            
+            # Prepare payload
+            payload = {
+                "model": model_config["name"],
+                "messages": anthropic_messages,
+                "max_tokens": model_config.get("max_output_tokens", 4096),
+                "temperature": model_config.get("temperature", 0.7)
+            }
+            
+            system_prompt = model_config.get("system_prompt", "")
+            if system_prompt:
+                payload["system"] = system_prompt.strip()
+            
+            # Make request
+            response = requests.post(url, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract content
+            content_parts = []
+            for item in data["content"]:
+                if item.get("type") == "text":
+                    content_parts.append(item.get("text", ""))
+            
+            return "\n".join(content_parts)
+            
+        except Exception as e:
+            st.error(f"Anthropic Error: {e}")
+            return "Sorry, I encountered an error while generating a response."
+    
+    def get_available_models(self) -> List[Dict]:
+        """Get available Anthropic models"""
+        return [
+            {
+                "name": "claude-3-5-sonnet-20241022",
+                "provider": "anthropic",
+                "display_name": "Claude 3.5 Sonnet",
+                "capabilities": ["text", "vision"]
+            },
+            {
+                "name": "claude-3-5-haiku-20241022", 
+                "provider": "anthropic",
+                "display_name": "Claude 3.5 Haiku",
+                "capabilities": ["text", "vision"]
+            },
+            {
+                "name": "claude-3-opus-20240229",
+                "provider": "anthropic",
+                "display_name": "Claude 3 Opus",
+                "capabilities": ["text", "vision"]
+            }
+        ]
+    
+    def validate_model_config(self, config: Dict) -> bool:
+        """Validate Anthropic model configuration"""
+        required_fields = ["name", "provider", "temperature"]
+        return all(field in config for field in required_fields)
+
+
+class ProviderManager:
+    """Manages all AI providers"""
+    
+    def __init__(self):
+        self.providers = {}
+        self._initialize_providers()
+    
+    def _initialize_providers(self):
+        """Initialize all available providers"""
+        google_key = st.secrets.get("GEMINI_API_KEY")
+        anthropic_key = st.secrets.get("ANTHROPIC_API_KEY")
+        
+        if google_key:
+            self.providers["google"] = GoogleProvider(google_key)
+        
+        if anthropic_key:
+            self.providers["anthropic"] = AnthropicProvider(anthropic_key)
+    
+    def get_provider(self, provider_name: str) -> BaseProvider:
+        """Get a specific provider"""
+        if provider_name not in self.providers:
+            raise ValueError(f"Provider {provider_name} not available")
+        return self.providers[provider_name]
+    
+    def generate_response(self, provider_name: str, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
+        """Generate response using specified provider"""
+        provider = self.get_provider(provider_name)
+        return provider.generate_response(messages, model_config, search_results)
+
+
+def initialize_provider_manager():
+    """Initialize the provider manager in session state"""
+    if 'provider_manager' not in st.session_state:
+        st.session_state.provider_manager = ProviderManager()
+
+def generate_chat_response_with_providers(search_results: Optional[str] = None):
+    """Updated generate_chat_response function using providers"""
+    messages = st.session_state.active_chat.get("messages", [])
+    model_config = st.session_state.db.models.find_one({"name": st.session_state.active_chat['model']})
+    
+    if not messages:
+        return "I'm ready to chat! What can I help you with?"
+    
+    if not model_config:
+        return "Error: Model configuration not found."
+    
+    try:
+        provider_name = model_config.get("provider", "google")
+        response = st.session_state.provider_manager.generate_response(
+            provider_name=provider_name,
+            messages=messages,
+            model_config=model_config,
+            search_results=search_results
+        )
+        return response
+    except Exception as e:
+        st.error(f"Error generating response: {e}")
+        return "Sorry, I encountered an error while generating a response."
