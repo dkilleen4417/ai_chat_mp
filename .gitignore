@@ -39,6 +39,9 @@ ENV/
 *.sql
 *.sqlite
 
+# Streamlit
+.streamlit/
+
 # OS generated files
 .DS_Store
 .DS_Store?
