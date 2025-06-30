@@ -7,6 +7,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import streamlit as st
+from tools import tool_registry
+from logger import logger
 
 
 class BaseProvider(ABC):
@@ -54,43 +56,101 @@ class GoogleProvider(BaseProvider):
     def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
         """Generate response using Google AI"""
         try:
-            # Create the generative model
+            # ------------------------------------------------------------------
+            # Prepare model with tool schemas (if any)
+            # ------------------------------------------------------------------
+            tool_configs = tool_registry.list_tool_configs()
             model = genai.GenerativeModel(
                 model_name=model_config["name"],
+                tools=tool_configs if tool_configs else None,
                 generation_config={
                     "temperature": model_config.get("temperature", 0.7),
                     "top_p": model_config.get("top_p", 0.9),
-                    "max_output_tokens": model_config.get("max_output_tokens", 8192)
-                }
+                    "max_output_tokens": model_config.get("max_output_tokens", 8192),
+                },
             )
-            
-            # Convert messages to Google AI format
-            api_history = []
-            
-            # Add system prompt if exists
+
+            # Build conversation history for the API
+            api_history: List[Dict[str, Any]] = []
             system_prompt = model_config.get("system_prompt", "")
             if system_prompt:
-                api_history.append({"role": "user", "parts": [f"System Prompt: {system_prompt}"]})
-                api_history.append({"role": "model", "parts": ["Understood. I will follow those instructions."]})
-            
-            # Add conversation history
+                api_history.extend(
+                    [
+                        {"role": "user", "parts": [f"System Prompt: {system_prompt}"]},
+                        {"role": "model", "parts": ["Acknowledged."]},
+                    ]
+                )
+
             for msg in messages:
                 role = "model" if msg["role"] == "assistant" else "user"
                 api_history.append({"role": role, "parts": [msg["content"]]})
-            
-            # Add search results if provided
+
             if search_results:
-                api_history.append({
-                    "role": "user",
-                    "parts": [f"Here are the search results to help you answer:\n\n{search_results}"]
-                })
-            
-            # Generate response
-            response = model.generate_content(api_history)
-            return response.text
+                api_history.append(
+                    {
+                        "role": "user",
+                        "parts": [f"Here are the search results to help you answer:\n\n{search_results}"],
+                    }
+                )
+
+            # ------------------------------------------------------------------
+            # Agentic loop: allow the model to call tools up to N times
+            # ------------------------------------------------------------------
+            for _ in range(3):
+                logger.debug("Sending to Gemini:")
+                logger.debug(api_history)
+                response = model.generate_content(api_history)
+                logger.debug("Gemini response raw: %s", response)
+                candidate = response.candidates[0]
+
+                # Detect tool / function call robustly
+                fc = None
+                try:
+                    for part in candidate.content.parts:
+                        if hasattr(part, "function_call") and part.function_call:
+                            fc = part.function_call
+                            break
+                except Exception:
+                    pass
+
+                if not fc:
+                    # Normal answer
+                    final_text = candidate.content.parts[0].text if hasattr(candidate.content.parts[0], "text") else response.text
+                    return final_text
+
+                tool_name = fc.name
+                args_json = fc.args if hasattr(fc, "args") else fc.get("args", "{}")  # type: ignore
+                try:
+                    args = json.loads(args_json) if isinstance(args_json, str) else args_json
+                except Exception:
+                    args = {}
+
+                tool_fn = tool_registry.get_callable(tool_name)
+                if not tool_fn:
+                    api_history.append({"role": "model", "parts": [f"I tried to call unknown tool {tool_name}"]})
+                    continue
+
+                # Run the tool and append result
+                tool_output = tool_fn(**args)
+                # Format function response according to Gemini's expected schema
+                api_history.append(
+                    {
+                        "role": "function",
+                        "parts": [{
+                            "function_response": {
+                                "name": tool_name,
+                                "response": {"name": tool_name, "content": tool_output}
+                            }
+                        }]
+                    }
+                )
+            # If loop exceeds
+            return "I couldn't complete the request with the available tools."
+
             
         except Exception as e:
-            st.error(f"Google AI Error: {e}")
+            logger.exception("GoogleProvider failed")
+            st.error("Sorry, the AI backend encountered an error. Please check logs.")
             return "Sorry, I encountered an error while generating a response."
     
     def get_available_models(self) -> List[Dict]:

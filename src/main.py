@@ -1,6 +1,8 @@
 import streamlit as st
 from pymongo import MongoClient
+from datetime import datetime, timedelta
 from time import time as current_time, sleep
+import pytz
 import config
 import google.generativeai as genai
 from typing import List, Dict, Any, Optional
@@ -8,7 +10,10 @@ import sys
 import os
 import json
 import requests
+from logger import logger
 from providers import ProviderManager, initialize_provider_manager, generate_chat_response_with_providers
+from query_optimizer import optimize_search_query
+from search_manager import SearchManager
 
 
 st.set_page_config(
@@ -152,7 +157,7 @@ def set_decision_model():
     )
 
 def apply_grounding(prompt: str) -> tuple[bool, str]:
-    """Determine if a search is needed for the given prompt."""
+    """Determine if a search is needed for the given prompt and which provider to use."""
     messages = [
         {"role": "user", "parts": [config.SEARCH_GROUNDING_SYSTEM_PROMPT, f"User message: {prompt}"]},
     ]
@@ -161,12 +166,17 @@ def apply_grounding(prompt: str) -> tuple[bool, str]:
         response = ss.decision_model.generate_content(contents=messages)
         decision = json.loads(response.text)
         needs_search = decision.get("needs_search", False)
+        # Default to 'serper' if not specified
+        search_provider = decision.get("search_provider", "serper").lower()
+        # Ensure we only return valid providers
+        if search_provider not in ["serper", "brave"]:
+            search_provider = "serper"
         reasoning = decision.get("reasoning", "No reasoning provided.")
-        print(f"Search decision: {needs_search}, Reason: {reasoning}")
-        return needs_search, "serper" # Defaulting to serper
+        logger.debug(f"Search decision: {needs_search}, Provider: {search_provider}, Reason: {reasoning}")
+        return needs_search, search_provider
     except Exception as e:
-        st.error(f"Error in grounding decision: {e}")
-        return False, ""
+        logger.error(f"Error in grounding decision: {e}")
+        return False, "serper"  # Default to serper on error
 
 def initialize():
     # ================ Session State Initialization ================
@@ -177,7 +187,23 @@ def initialize():
     ss.brave_api_key = st.secrets.get("BRAVE_API_KEY")       
     ss.db = get_database()
     ss.chats = list(ss.db.chats.find({"archived": False}))
+    
+    # Initialize or update active chat with timezone
     ss.active_chat = ss.db.chats.find_one({"name": "Scratch Pad"})
+    if ss.active_chat and "timezone" not in ss.active_chat:
+        # Set default timezone to user's local timezone or fallback to UTC
+        try:
+            import tzlocal
+            default_tz = tzlocal.get_localzone().zone
+        except:
+            default_tz = "UTC"
+            
+        ss.db.chats.update_one(
+            {"_id": ss.active_chat["_id"]},
+            {"$set": {"timezone": default_tz}}
+        )
+        ss.active_chat["timezone"] = default_tz
+    
     ss.llm_avatar = config.LLM_AVATAR
     ss.user_avatar = config.USER_AVATAR
     ss.models = list(ss.db.models.find())
@@ -190,37 +216,58 @@ def initialize():
     set_decision_model()
 
 
+def get_temporal_context(timezone: str = "UTC") -> str:
+    """Generate a temporal context string with timezone support.
+    
+    Args:
+        timezone: Timezone string (e.g., 'America/New_York')
+        
+    Returns:
+        Formatted string with current date/time information
+    """
+    try:
+        # Get timezone object, default to UTC if invalid
+        tz = pytz.timezone(timezone) if timezone in pytz.all_timezones else pytz.UTC
+    except Exception:
+        tz = pytz.UTC
+        
+    now = datetime.now(tz)
+    
+    # Format the temporal information
+    return (
+        f"Current Date and Time: {now.strftime('%Y-%m-%d %H:%M:%S')} ({tz.zone})\n"
+        f"Day of Week: {now.strftime('%A')}\n"
+        f"Day of Year: {now.strftime('%j')}\n"
+        f"Week of Year: {now.strftime('%U')}\n"
+        f"Timezone: {tz.zone} (UTC{now.strftime('%z')})\n"
+        f"Is DST: {'Yes' if now.dst() else 'No'}"
+    )
+
 def generate_chat_response(search_results: Optional[str] = None):
-    """Generates a chat response from the Gemini model."""
+    """Generates a chat response from the selected model."""
     messages = ss.active_chat.get("messages", [])
-    system_prompt = ss.active_chat.get("system_prompt", "")
+    model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
     
     if not messages:
         return "I'm ready to chat! What can I help you with?"
-
-    # Construct the history for the API call
-    api_history = []
     
-    # Prepend the system prompt if it exists
-    if system_prompt:
-        api_history.append({"role": "user", "parts": [f"System Prompt: {system_prompt}"]})
-        api_history.append({"role": "model", "parts": ["Understood. I will follow those instructions."]})
-
-    # Add all previous messages
-    for msg in messages:
-        role = "model" if msg["role"] == "assistant" else "user"
-        api_history.append({"role": role, "parts": [msg["content"]]})
-
-    # Add search results as a new user message for context
-    if search_results:
-        api_history.append({
-            "role": "user",
-            "parts": [f"Here are the search results to help you answer:\n\n{search_results}"]
-        })
+    if not model_config:
+        return "Error: Model configuration not found."
 
     try:
-        response = ss.gen_model.generate_content(api_history)
-        return response.text
+        # Get temporal context with timezone support
+        user_timezone = ss.active_chat.get("timezone", "UTC")
+        temporal_context = get_temporal_context(user_timezone)
+        
+        # Add temporal context to system prompt
+        model_config = model_config.copy()  # Create a copy to avoid modifying the original
+        system_prompt = model_config.get("system_prompt", "") + f"\n\nTemporal Context:\n{temporal_context}"
+        model_config["system_prompt"] = system_prompt
+        
+        # Generate response using the provider system
+        response = generate_chat_response_with_providers(search_results)
+        return response
+        
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return "Sorry, I encountered an error while generating a response."
@@ -378,11 +425,20 @@ def render_chat():
         search_results_text = None
 
         if needs_search:
-            with st.spinner(f"Searching with {search_provider.capitalize()}..."):
-                if search_provider == 'brave':
-                    search_results_text = brave_search(prompt)
-                else:
-                    search_results_text = serper_search(prompt)
+            with st.spinner(f"Optimizing search query..."):
+                optimized_prompt = optimize_search_query(prompt)
+                logger.debug(f"Original query: {prompt} -> Optimized: {optimized_prompt}")
+                
+            with st.spinner("Searching for best results..."):
+                search_manager = SearchManager()
+                search_results, score, engine_used = search_manager.search_with_fallback(optimized_prompt)
+                
+                if score < 3.0:  # If results are very poor, try original query
+                    logger.debug("Poor search results, trying original query")
+                    search_results, score, engine_used = search_manager.search_with_fallback(prompt)
+                
+                logger.info(f"Best result from {engine_used} with score {score:.1f}/10")
+                search_results_text = search_results if score > 2.0 else "No relevant search results found."
         
         # Generate the AI response
         with st.spinner("🤖 Thinking..."):
@@ -803,21 +859,21 @@ def manage_UI():
         default_index = 0
 
     def handle_chat_selection():
-        print(f"DEBUG: Chat selection triggered")
-        print(f"DEBUG: Selected chat name: {ss.chat_selector_name}")
-        print(f"DEBUG: Current active_chat before change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
+        logger.debug("Chat selection triggered")
+        logger.debug(f"Selected chat name: {ss.chat_selector_name}")
+        logger.debug(f"Current active_chat before change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
         
         ss.app_mode = "chat"
         # Find the selected chat from the list
         selected_chat_name = ss.chat_selector_name
         for chat in chat_docs_for_options:
             if chat['name'] == selected_chat_name:
-                print(f"DEBUG: Found chat document: {chat.keys()}")
-                print(f"DEBUG: Chat has messages field: {'messages' in chat}")
+                logger.debug(f"Found chat document keys: {list(chat.keys())}")
+                logger.debug(f"Chat has messages field: {'messages' in chat}")
                 ss.active_chat = chat
                 break
     
-    print(f"DEBUG: Active chat after change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
+    logger.debug(f"Active chat after change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
 
     st.sidebar.radio(
         "Available Chats", options=[doc['name'] for doc in chat_docs_for_options], 
@@ -852,13 +908,13 @@ def main():
     except Exception as e:
         # Log the full exception with traceback
         import traceback
-        print(f"Unhandled exception in main: {e}")
+        logger.exception("Unhandled exception in main")
         
         # User-friendly error message
         st.error(f"An unexpected error occurred: {e}")
         
         # Show more detailed error in debug mode
-        print(f"Error in main: {e}")
+        logger.error(f"Error in main: {e}")
         with st.expander("Error Details", expanded=False):
             st.code(traceback.format_exc(), language='python')
                 

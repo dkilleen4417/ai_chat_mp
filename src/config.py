@@ -45,8 +45,30 @@ A search is NOT required for:
     * *Example: "How are you today?"*
 
 ---
+**SEARCH PROVIDER SELECTION:**
+- Use `"brave"` for general web searches, privacy-focused queries, or when you want diverse results.
+- Use `"serper"` for Google-specific results, local searches, or when you need structured data.
+
 **RESPONSE FORMAT:**
-Respond with a JSON object containing two keys: "needs_search" (boolean) and "reasoning" (a concise explanation referencing the criteria above).
+Respond with a JSON object containing three keys:
+- `"needs_search"` (boolean): Whether a search is needed
+- `"search_provider"` (string): Either "brave" or "serper"
+- `"reasoning"` (string): A concise explanation for the decision
+
+**EXAMPLE RESPONSES:**
+```json
+{
+  "needs_search": true,
+  "search_provider": "brave",
+  "reasoning": "Query requires current information about recent events"
+}
+
+{
+  "needs_search": false,
+  "search_provider": "serper",
+  "reasoning": "Question can be answered with general knowledge"
+}
+```
 
 **Example 1:**
 User Message: "What were the main announcements from Apple's last keynote event?"
