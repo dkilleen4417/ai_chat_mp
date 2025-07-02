@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "TodoWrite",
+      "TodoRead", 
+      "Write(*/todo.md)",
+      "Write(*/tasks/todo.md)",
+      "Read",
+      "Glob",
+      "Grep",
+      "Task",
+      "Edit",
+      "MultiEdit"
+    ],
+    "deny": [
+      "Bash(rm *)",
+      "Bash(git push*)"
+    ]
+  },
+  "env": {
+    "CLAUDE_WORKFLOW": "plan-first",
+    "CLAUDE_TODO_REQUIRED": "true",
+    "CLAUDE_SIMPLE_CHANGES": "true"
+  }
+}
