@@ -97,30 +97,53 @@ def test_weatherflow_api():
                 latest_obs = data["obs"][0]
                 print(f"Latest observation has {len(latest_obs)} fields")
                 
+                # Show raw data structure first
+                try:
+                    print(f"Raw observation data (first 20): {list(latest_obs[:20])}")  # Show first 20 fields
+                except Exception as e:
+                    print(f"Error showing raw data: {e}")
+                    print(f"Type of latest_obs: {type(latest_obs)}")
+                    print(f"Latest_obs: {latest_obs}")
+                
                 # Parse observation data (WeatherFlow format)
                 if len(latest_obs) >= 18:
-                    timestamp = latest_obs[0]
-                    wind_avg = latest_obs[2]
-                    wind_gust = latest_obs[3]
-                    wind_direction = latest_obs[4]
-                    pressure = latest_obs[6]
-                    temp_c = latest_obs[7]
-                    humidity = latest_obs[8]
-                    uv = latest_obs[10]
-                    rain_prev_min = latest_obs[12]
-                    
-                    # Convert to readable format
-                    obs_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                    temp_f = (temp_c * 9/5) + 32 if temp_c is not None else None
-                    
-                    print(f"\n🌡️  Temperature: {temp_f:.1f}°F ({temp_c:.1f}°C)")
-                    print(f"💧 Humidity: {humidity}%")
-                    print(f"💨 Wind: {wind_avg:.1f} mph (gusts: {wind_gust:.1f})")
-                    print(f"🧭 Wind Direction: {wind_direction}°")
-                    print(f"📊 Pressure: {pressure:.1f} mb")
-                    print(f"☀️  UV Index: {uv}")
-                    print(f"🌧️  Rain (last min): {rain_prev_min} inches")
-                    print(f"⏰ Observation Time: {obs_time}")
+                    try:
+                        timestamp = latest_obs[0]
+                        print(f"Timestamp: {timestamp} (type: {type(timestamp)})")
+                        
+                        # Try different field mappings since we have 37 fields
+                        for i in range(min(15, len(latest_obs))):
+                            val = latest_obs[i]
+                            print(f"Field {i}: {val} (type: {type(val)})")
+                        
+                        wind_avg = latest_obs[2]
+                        wind_gust = latest_obs[3]
+                        wind_direction = latest_obs[4]
+                        pressure = latest_obs[6]
+                        temp_c = latest_obs[7]
+                        humidity = latest_obs[8]
+                        uv = latest_obs[10]
+                        rain_prev_min = latest_obs[12]
+                        
+                        # Convert to readable format
+                        if timestamp and timestamp > 0:
+                            obs_time = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                        else:
+                            obs_time = "Unknown timestamp"
+                            
+                        temp_f = (temp_c * 9/5) + 32 if temp_c is not None else None
+                        
+                        print(f"\n🌡️  Temperature: {temp_f:.1f}°F ({temp_c:.1f}°C)")
+                        print(f"💧 Humidity: {humidity}%")
+                        print(f"💨 Wind: {wind_avg:.1f} mph (gusts: {wind_gust:.1f})")
+                        print(f"🧭 Wind Direction: {wind_direction}°")
+                        print(f"📊 Pressure: {pressure:.1f} mb")
+                        print(f"☀️  UV Index: {uv}")
+                        print(f"🌧️  Rain (last min): {rain_prev_min} inches")
+                        print(f"⏰ Observation Time: {obs_time}")
+                    except Exception as e:
+                        print(f"Parsing error: {e}")
+                        print(f"Raw data: {latest_obs}")
                 else:
                     print("⚠️  Observation data format unexpected")
                     print(f"Data length: {len(latest_obs)}")

@@ -303,27 +303,27 @@ def get_home_weather(include_forecast: bool = True) -> str:
         # Get the most recent observation
         latest_obs = obs_data["obs"][0]
         
-        # Parse observation data (WeatherFlow format)
-        # The obs array has more fields than expected (37 vs 18)
-        # Let's be defensive and check array length
-        logger.debug(f"Observation data has {len(latest_obs)} fields")
+        # Parse observation data (WeatherFlow dictionary format)
+        logger.debug(f"Observation data type: {type(latest_obs)}")
+        logger.debug(f"Observation data keys: {list(latest_obs.keys()) if isinstance(latest_obs, dict) else 'Not a dict'}")
         
-        if len(latest_obs) < 13:
-            return "Error: Observation data format unexpected from WeatherFlow station."
+        # WeatherFlow returns a dictionary, not an array
+        if not isinstance(latest_obs, dict):
+            return "Error: WeatherFlow observation data format unexpected (not a dictionary)."
         
-        timestamp = latest_obs[0]
-        wind_avg = latest_obs[2] if len(latest_obs) > 2 else None
-        wind_gust = latest_obs[3] if len(latest_obs) > 3 else None
-        wind_direction = latest_obs[4] if len(latest_obs) > 4 else None
-        pressure = latest_obs[6] if len(latest_obs) > 6 else None
-        temp_c = latest_obs[7] if len(latest_obs) > 7 else None
-        humidity = latest_obs[8] if len(latest_obs) > 8 else None
-        uv = latest_obs[10] if len(latest_obs) > 10 else None
-        rain_prev_min = latest_obs[12] if len(latest_obs) > 12 else None
+        # Extract values from dictionary keys
+        timestamp = latest_obs.get('timestamp', 0)
+        wind_avg = latest_obs.get('wind_avg')
+        wind_gust = latest_obs.get('wind_gust')
+        wind_direction = latest_obs.get('wind_direction')
+        pressure = latest_obs.get('barometric_pressure') or latest_obs.get('station_pressure')
+        temp_c = latest_obs.get('air_temperature')
+        humidity = latest_obs.get('relative_humidity')
+        uv = latest_obs.get('uv')
+        rain_current = latest_obs.get('precip', 0)
         
         # Debug logging for key values
         logger.debug(f"Parsed values - timestamp: {timestamp}, temp_c: {temp_c}, humidity: {humidity}, wind_avg: {wind_avg}")
-        logger.debug(f"First 15 obs values: {latest_obs[:15]}")
         
         # Convert Celsius to Fahrenheit
         temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
@@ -379,8 +379,13 @@ def get_home_weather(include_forecast: bool = True) -> str:
                 uv_desc = " (Extreme)"
             result.append(f"UV Index: {uv:.1f}{uv_desc}")
         
-        if rain_prev_min is not None and rain_prev_min > 0:
-            result.append(f"🌧️ Rain: {rain_prev_min:.2f} inches in last minute")
+        if rain_current is not None and rain_current > 0:
+            result.append(f"🌧️ Current precipitation: {rain_current:.2f} inches")
+        
+        # Add daily rain accumulation
+        rain_today = latest_obs.get('precip_accum_local_day')
+        if rain_today is not None and rain_today > 0:
+            result.append(f"🌧️ Rain today: {rain_today:.2f} inches")
         
         # Get forecast if requested
         if include_forecast:
