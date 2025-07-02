@@ -120,20 +120,17 @@ def initialize():
 
 
 def generate_chat_response(search_results: Optional[str] = None):
-    """Generates a chat response from the selected model."""
-    messages = ss.active_chat.get("messages", [])
-    model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
-    
-    if not messages:
-        return "I'm ready to chat! What can I help you with?"
-    
-    if not model_config:
-        return "Error: Model configuration not found."
-
+    """Generates a chat response from the selected model with metrics."""
     try:
-        # Generate response using the provider system
-        response = generate_chat_response_with_providers(search_results)
-        return response
+        # Generate response using the provider system (returns structured object)
+        response_obj = generate_chat_response_with_providers(search_results)
+        
+        # Extract text for backward compatibility
+        if isinstance(response_obj, dict) and "text" in response_obj:
+            return response_obj["text"]
+        else:
+            # Fallback for old format
+            return response_obj
         
     except Exception as e:
         st.error(f"Error generating response: {e}")

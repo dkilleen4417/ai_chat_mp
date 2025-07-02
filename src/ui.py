@@ -1,6 +1,7 @@
 import streamlit as st
 from time import time as current_time, sleep
 from logger import logger
+from utils import format_response_metrics
 
 def show_notification(message, type="success"):
     icon = "✅" if type == "success" else "❌"
@@ -123,6 +124,10 @@ def render_chat(db, provider_manager, search_manager, apply_grounding, optimize_
                 st.markdown(msg["content"])
 
     if prompt := st.chat_input("Type your message here..."):
+        # Clear previous response metrics before new message
+        if hasattr(st.session_state, 'last_response_metrics'):
+            delattr(st.session_state, 'last_response_metrics')
+        
         user_message = {"role": "user", "content": prompt, "timestamp": current_time()}
         st.session_state.active_chat["messages"].append(user_message)
         with message_container.chat_message("user", avatar=st.session_state.user_avatar):
@@ -147,7 +152,14 @@ def render_chat(db, provider_manager, search_manager, apply_grounding, optimize_
                 search_results_text = search_results if score > 2.0 else "No relevant search results found."
         
         with st.spinner("🤖 Thinking..."):
-            response_text = generate_chat_response_with_providers(search_results=search_results_text)
+            response_obj = generate_chat_response_with_providers(search_results=search_results_text)
+
+        # Handle structured response format
+        if isinstance(response_obj, dict) and "text" in response_obj:
+            response_text = response_obj["text"]
+        else:
+            # Fallback for old format
+            response_text = response_obj
 
         with message_container.chat_message("assistant", avatar=st.session_state.llm_avatar):
             if search_results_text:
@@ -174,6 +186,11 @@ def render_chat(db, provider_manager, search_manager, apply_grounding, optimize_
             }
         )
         st.rerun()
+
+    # Display response metrics outside the message container (ephemeral)
+    if hasattr(st.session_state, 'last_response_metrics') and st.session_state.last_response_metrics:
+        metrics_text = format_response_metrics(st.session_state.last_response_metrics)
+        st.info(metrics_text)
 
 def render_clear(db):
     db.chats.update_one(
