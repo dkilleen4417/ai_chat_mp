@@ -3,7 +3,6 @@ from pymongo import MongoClient
 from datetime import datetime
 from time import time as current_time
 from typing import Optional
-import pytz
 import config
 import google.generativeai as genai
 import json
@@ -105,19 +104,6 @@ def initialize():
     ss.chats = list(ss.db.chats.find({"archived": False}))
 
     ss.active_chat = ss.db.chats.find_one({"name": "Scratch Pad"})
-    if ss.active_chat and "timezone" not in ss.active_chat:
-        # Set default timezone to user's local timezone or fallback to UTC
-        try:
-            import tzlocal
-            default_tz = tzlocal.get_localzone().zone
-        except:
-            default_tz = "UTC"
-            
-        ss.db.chats.update_one(
-            {"_id": ss.active_chat["_id"]},
-            {"$set": {"timezone": default_tz}}
-        )
-        ss.active_chat["timezone"] = default_tz
     
     ss.llm_avatar = config.LLM_AVATAR
     ss.user_avatar = config.USER_AVATAR
@@ -132,32 +118,6 @@ def initialize():
     ss.apply_grounding = apply_grounding
 
 
-def get_temporal_context(timezone: str = "UTC") -> str:
-    """Generate a temporal context string with timezone support.
-    
-    Args:
-        timezone: Timezone string (e.g., 'America/New_York')
-        
-    Returns:
-        Formatted string with current date/time information
-    """
-    try:
-        # Get timezone object, default to UTC if invalid
-        tz = pytz.timezone(timezone) if timezone in pytz.all_timezones else pytz.UTC
-    except Exception:
-        tz = pytz.UTC
-        
-    now = datetime.now(tz)
-    
-    # Format the temporal information
-    return (
-        f"Current Date and Time: {now.strftime('%Y-%m-%d %H:%M:%S')} ({tz.zone})\n"
-        f"Day of Week: {now.strftime('%A')}\n"
-        f"Day of Year: {now.strftime('%j')}\n"
-        f"Week of Year: {now.strftime('%U')}\n"
-        f"Timezone: {tz.zone} (UTC{now.strftime('%z')})\n"
-        f"Is DST: {'Yes' if now.dst() else 'No'}"
-    )
 
 def generate_chat_response(search_results: Optional[str] = None):
     """Generates a chat response from the selected model."""
@@ -171,15 +131,6 @@ def generate_chat_response(search_results: Optional[str] = None):
         return "Error: Model configuration not found."
 
     try:
-        # Get temporal context with timezone support
-        user_timezone = ss.active_chat.get("timezone", "UTC")
-        temporal_context = get_temporal_context(user_timezone)
-        
-        # Add temporal context to system prompt
-        model_config = model_config.copy()  # Create a copy to avoid modifying the original
-        system_prompt = model_config.get("system_prompt", "") + f"\n\nTemporal Context:\n{temporal_context}"
-        model_config["system_prompt"] = system_prompt
-        
         # Generate response using the provider system
         response = generate_chat_response_with_providers(search_results)
         return response
