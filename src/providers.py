@@ -59,10 +59,9 @@ class GoogleProvider(BaseProvider):
         """Generate response using Google AI with metrics"""
         with ResponseTimer() as timer:
             try:
-                # Calculate input tokens for metrics
-                input_text = ""
-                for msg in messages:
-                    input_text += msg.get("content", "")
+                # Calculate input tokens for metrics (current user message only)
+                current_user_message = messages[-1].get("content", "") if messages else ""
+                input_text = current_user_message
                 if search_results:
                     input_text += search_results
                 input_tokens = estimate_tokens(input_text)
@@ -246,10 +245,9 @@ class AnthropicProvider(BaseProvider):
         """Generate response using Anthropic Claude via HTTP with metrics"""
         with ResponseTimer() as timer:
             try:
-                # Calculate input tokens for metrics
-                input_text = ""
-                for msg in messages:
-                    input_text += msg.get("content", "")
+                # Calculate input tokens for metrics (current user message only)
+                current_user_message = messages[-1].get("content", "") if messages else ""
+                input_text = current_user_message
                 if search_results:
                     input_text += search_results
                 input_tokens = estimate_tokens(input_text)
@@ -405,10 +403,9 @@ class OllamaProvider(BaseProvider):
         """Generate response using Ollama via HTTP with metrics"""
         with ResponseTimer() as timer:
             try:
-                # Calculate input tokens for metrics
-                input_text = ""
-                for msg in messages:
-                    input_text += msg.get("content", "")
+                # Calculate input tokens for metrics (current user message only)
+                current_user_message = messages[-1].get("content", "") if messages else ""
+                input_text = current_user_message
                 if search_results:
                     input_text += search_results
                 input_tokens = estimate_tokens(input_text)
