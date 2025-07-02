@@ -209,7 +209,7 @@ def get_home_weather(include_forecast: bool = True) -> str:
     try:
         # Get credentials from secrets
         api_endpoint = st.secrets.get("WEATHERFLOW_API_ENDPOINT", "https://swd.weatherflow.com/swd/rest")
-        access_token = st.secrets.get("WEATHERFLOW_ACCESSTOKEN")
+        access_token = st.secrets.get("WEATHERFLOW_ACCESS_TOKEN")  # Match your existing secrets file
         station_id = st.secrets.get("WEATHERFLOW_STATION_ID")
         
         logger.debug(f"WeatherFlow config - Endpoint: {api_endpoint}")
@@ -217,7 +217,7 @@ def get_home_weather(include_forecast: bool = True) -> str:
         logger.debug(f"WeatherFlow config - Station ID: {station_id}")
         
         if not access_token:
-            return "Error: WeatherFlow access token not found. Please check WEATHERFLOW_ACCESSTOKEN in secrets."
+            return "Error: WeatherFlow access token not found. Please check WEATHERFLOW_ACCESS_TOKEN in secrets."
         if not station_id:
             return "Error: WeatherFlow station ID not found. Please check WEATHERFLOW_STATION_ID in secrets."
         
