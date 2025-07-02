@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 import streamlit as st
 from tools import tool_registry
 from logger import logger
+from config import OLLAMA_BASE_URL
 
 
 class BaseProvider(ABC):
@@ -275,6 +276,111 @@ class AnthropicProvider(BaseProvider):
         return all(field in config for field in required_fields)
 
 
+class OllamaProvider(BaseProvider):
+    """Provider for Ollama (Local) models using HTTP API"""
+    
+    def __init__(self, api_key: str = ""):
+        # Ollama doesn't require an API key
+        super().__init__(api_key)
+    
+    def initialize_client(self):
+        """Initialize HTTP client for Ollama"""
+        self._client = None  # Using requests directly
+    
+    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> str:
+        """Generate response using Ollama via HTTP"""
+        try:
+            url = f"{OLLAMA_BASE_URL}/api/chat"
+            
+            # Process messages for Ollama format
+            ollama_messages = []
+            
+            # Add system prompt if provided
+            system_prompt = model_config.get("system_prompt", "")
+            if system_prompt:
+                ollama_messages.append({
+                    "role": "system",
+                    "content": system_prompt
+                })
+            
+            # Add conversation history
+            for msg in messages:
+                ollama_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+            
+            # Add search results if provided
+            if search_results:
+                ollama_messages.append({
+                    "role": "user", 
+                    "content": f"Here are the search results to help you answer:\n\n{search_results}"
+                })
+            
+            # Prepare payload
+            payload = {
+                "model": model_config["name"],
+                "messages": ollama_messages,
+                "stream": False,
+                "options": {
+                    "temperature": model_config.get("temperature", 0.7),
+                    "num_predict": model_config.get("max_output_tokens", 8192)
+                }
+            }
+            
+            # Make request
+            response = requests.post(url, json=payload, timeout=120)  # Longer timeout for local models
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract response
+            if "message" in data and "content" in data["message"]:
+                return data["message"]["content"]
+            else:
+                return "No response received from Ollama"
+                
+        except requests.exceptions.ConnectionError:
+            st.error("Could not connect to Ollama. Make sure Ollama is running on localhost:11434")
+            return "Error: Could not connect to Ollama server"
+        except requests.exceptions.Timeout:
+            st.error("Ollama request timed out")
+            return "Error: Request timed out"
+        except Exception as e:
+            logger.exception("OllamaProvider failed")
+            st.error(f"Ollama Error: {e}")
+            return "Sorry, I encountered an error while generating a response."
+    
+    def get_available_models(self) -> List[Dict]:
+        """Get available Ollama models from the API"""
+        try:
+            url = f"{OLLAMA_BASE_URL}/api/tags"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            models = []
+            for model in data.get("models", []):
+                models.append({
+                    "name": model["name"],
+                    "provider": "ollama",
+                    "display_name": f"Ollama {model['name']}",
+                    "capabilities": ["text"],
+                    "size": model.get("size", 0),
+                    "parameter_size": model.get("details", {}).get("parameter_size", "Unknown")
+                })
+            
+            return models
+            
+        except Exception as e:
+            logger.warning(f"Could not fetch Ollama models: {e}")
+            return []
+    
+    def validate_model_config(self, config: Dict) -> bool:
+        """Validate Ollama model configuration"""
+        required_fields = ["name", "provider"]
+        return all(field in config for field in required_fields)
+
+
 class ProviderManager:
     """Manages all AI providers"""
     
@@ -292,6 +398,18 @@ class ProviderManager:
         
         if anthropic_key:
             self.providers["anthropic"] = AnthropicProvider(anthropic_key)
+        
+        # Initialize Ollama provider (no API key needed)
+        try:
+            # Test if Ollama is available
+            response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=5)
+            if response.status_code == 200:
+                self.providers["ollama"] = OllamaProvider()
+                logger.info("Ollama provider initialized successfully")
+            else:
+                logger.warning("Ollama server not responding correctly")
+        except Exception as e:
+            logger.warning(f"Ollama not available: {e}")
     
     def get_provider(self, provider_name: str) -> BaseProvider:
         """Get a specific provider"""

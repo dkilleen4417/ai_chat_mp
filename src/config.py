@@ -11,6 +11,9 @@ DEFAULT_MODEL = "gemini-2.5-flash-lite-preview-06-17"
 # The endpoint for Google's Generative AI services.
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com"
 
+# --- Ollama Configuration ---
+OLLAMA_BASE_URL = "http://localhost:11434"
+
 # --- UI Configuration ---
 LLM_AVATAR = "🤖"
 USER_AVATAR = "😎"
@@ -408,6 +411,116 @@ MODEL_TEMPLATES = {
         "image_output": False,
         "tools": True,
         "functions": True,
+        "thinking": False,
+        "native_grounding": False
+    },
+    
+    # Ollama Models (Local)
+    "Llama 3.3 70B": {
+        "name": "llama3.3:latest",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 128000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
+        "thinking": False,
+        "native_grounding": False
+    },
+    "Devstral 24B": {
+        "name": "devstral:24b",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 32000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
+        "thinking": False,
+        "native_grounding": False
+    },
+    "Tulu3 8B": {
+        "name": "tulu3:latest",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 32000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
+        "thinking": False,
+        "native_grounding": False
+    },
+    "Mistral Small 24B": {
+        "name": "mistral-small:24b",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 32000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
+        "thinking": False,
+        "native_grounding": False
+    },
+    "Command R7B": {
+        "name": "command-r7b:latest",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 32000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
+        "thinking": False,
+        "native_grounding": False
+    },
+    "Phi4 14B": {
+        "name": "phi4:latest",
+        "provider": "ollama",
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_output_tokens": 8192,
+        "max_input_tokens": 32000,
+        "input_price": 0.0,
+        "output_price": 0.0,
+        "text_input": True,
+        "image_input": False,
+        "text_output": True,
+        "image_output": False,
+        "tools": False,
+        "functions": False,
         "thinking": False,
         "native_grounding": False
     }
