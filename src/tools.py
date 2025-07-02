@@ -278,8 +278,8 @@ def get_home_weather(include_forecast: bool = True) -> str:
         
         logger.info(f"Fetching home weather from WeatherFlow station: {station_id}")
         
-        # Get current station observations
-        obs_url = f"{api_endpoint}/observations/station/{station_id}"
+        # Get current station observations (correct WeatherFlow API format)
+        obs_url = f"https://swd.weatherflow.com/swd/rest/observations/station/{station_id}"
         params = {"token": access_token}
         
         logger.debug(f"WeatherFlow request URL: {obs_url}")
@@ -373,8 +373,8 @@ def get_home_weather(include_forecast: bool = True) -> str:
         # Get forecast if requested
         if include_forecast:
             try:
-                # Get station details for location
-                station_url = f"{api_endpoint}/stations/{station_id}"
+                # Get station details for location (correct WeatherFlow API format)
+                station_url = f"https://swd.weatherflow.com/swd/rest/stations/{station_id}"
                 station_resp = requests.get(station_url, params=params, timeout=10)
                 station_resp.raise_for_status()
                 station_data = station_resp.json()
