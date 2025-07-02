@@ -200,6 +200,54 @@ def get_weather_forecast(location: str, days: int = 3) -> str:
         return "Sorry, an unexpected error occurred while fetching the weather. Please try again later."
 
 
+def enhance_user_query(original_query: str) -> str:
+    """Enhance user query to better match available tools and capabilities.
+    
+    Args:
+        original_query: The user's original question/request
+    """
+    try:
+        # Get the decision model from session state
+        if not hasattr(st.session_state, 'decision_model'):
+            return original_query  # Fallback to original if no decision model
+        
+        enhancement_prompt = f"""You are a query enhancement specialist. Your job is to rewrite user queries to better utilize available tools while preserving the user's intent.
+
+Available tools:
+1. get_weather_forecast(location, days) - Worldwide weather for any location
+2. get_home_weather(include_forecast) - Personal weather station data (use for "home", "my station", "personal weather")
+3. brave_search(query) - Web search using Brave
+4. serper_search(query) - Google search via Serper
+
+Enhancement rules:
+- If user asks about "home weather", "my weather", "personal station" → ensure it's phrased to trigger get_home_weather
+- If user asks about weather in a location → ensure proper format for get_weather_forecast
+- If user needs current information → ensure it triggers search tools
+- Preserve the user's original intent and tone
+- Don't mention the enhancement process
+
+Original query: "{original_query}"
+
+Enhanced query (or return original if no enhancement needed):"""
+
+        messages = [{"role": "user", "parts": [enhancement_prompt]}]
+        
+        response = st.session_state.decision_model.generate_content(contents=messages)
+        enhanced_query = response.text.strip()
+        
+        # Basic validation - if enhancement seems off, use original
+        if len(enhanced_query) > len(original_query) * 3 or not enhanced_query:
+            logger.debug(f"Query enhancement rejected - using original: {original_query}")
+            return original_query
+        
+        logger.debug(f"Query enhanced: '{original_query}' → '{enhanced_query}'")
+        return enhanced_query
+        
+    except Exception as e:
+        logger.warning(f"Query enhancement failed: {e}")
+        return original_query  # Always fallback to original
+
+
 def get_home_weather(include_forecast: bool = True) -> str:
     """Get current weather data from your personal WeatherFlow Tempest station.
     
@@ -431,6 +479,23 @@ class ToolRegistry:
 # Initialize the tool registry
 tool_registry = ToolRegistry()
 
+# Register query enhancement tool
+tool_registry.register_tool(
+    enhance_user_query,
+    "enhance_user_query", 
+    "Enhance and optimize user queries to better match available tools and capabilities.",
+    params_schema={
+        "type": "OBJECT",
+        "properties": {
+            "original_query": {
+                "type": "string",
+                "description": "The user's original question or request to enhance"
+            }
+        },
+        "required": ["original_query"]
+    }
+)
+
 # Register search tools
 tool_registry.register_tool(
     brave_search, 
@@ -482,6 +547,7 @@ tool_registry.register_tool(
 )
 
 __all__ = [
+    "enhance_user_query",
     "brave_search",
     "serper_search",
     "get_weather_forecast",
