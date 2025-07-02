@@ -128,23 +128,10 @@ class GoogleProvider(BaseProvider):
                         # Normal answer - extract usage data if available
                         final_text = candidate.content.parts[0].text if hasattr(candidate.content.parts[0], "text") else response.text
                         
-                        # Try to get actual token usage from Google response
+                        # Use our estimates for simple performance indication
                         actual_input_tokens = input_tokens
                         actual_output_tokens = estimate_tokens(final_text)
                         estimated_fields = ["input_tokens", "output_tokens"]
-                        
-                        # Check if Google provides usage metadata
-                        try:
-                            if hasattr(response, 'usage_metadata'):
-                                usage = response.usage_metadata
-                                if hasattr(usage, 'prompt_token_count'):
-                                    actual_input_tokens = usage.prompt_token_count
-                                    estimated_fields.remove("input_tokens")
-                                if hasattr(usage, 'candidates_token_count'):
-                                    actual_output_tokens = usage.candidates_token_count
-                                    estimated_fields.remove("output_tokens")
-                        except Exception as e:
-                            logger.debug(f"Could not extract Google usage metadata: {e}")
                         
                         # Create metrics
                         metrics = {
@@ -302,23 +289,10 @@ class AnthropicProvider(BaseProvider):
                 
                 final_text = "\n".join(content_parts)
                 
-                # Try to get actual token usage from Anthropic response
+                # Use our estimates for simple performance indication
                 actual_input_tokens = input_tokens
                 actual_output_tokens = estimate_tokens(final_text)
                 estimated_fields = ["input_tokens", "output_tokens"]
-                
-                # Check if Anthropic provides usage metadata
-                try:
-                    if "usage" in data:
-                        usage = data["usage"]
-                        if "input_tokens" in usage:
-                            actual_input_tokens = usage["input_tokens"]
-                            estimated_fields.remove("input_tokens")
-                        if "output_tokens" in usage:
-                            actual_output_tokens = usage["output_tokens"]
-                            estimated_fields.remove("output_tokens")
-                except Exception as e:
-                    logger.debug(f"Could not extract Anthropic usage metadata: {e}")
                 
                 # Create metrics
                 metrics = {
@@ -460,21 +434,10 @@ class OllamaProvider(BaseProvider):
                 else:
                     final_text = "No response received from Ollama"
                 
-                # Try to get actual token usage from Ollama response
+                # Use our estimates for simple performance indication
                 actual_input_tokens = input_tokens
                 actual_output_tokens = estimate_tokens(final_text)
                 estimated_fields = ["input_tokens", "output_tokens"]
-                
-                # Check if Ollama provides token counts (some versions do)
-                try:
-                    if "prompt_eval_count" in data:
-                        actual_input_tokens = data["prompt_eval_count"]
-                        estimated_fields.remove("input_tokens")
-                    if "eval_count" in data:
-                        actual_output_tokens = data["eval_count"]
-                        estimated_fields.remove("output_tokens")
-                except Exception as e:
-                    logger.debug(f"Could not extract Ollama token metadata: {e}")
                 
                 # Create metrics
                 metrics = {
