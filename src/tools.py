@@ -212,8 +212,14 @@ def get_home_weather(include_forecast: bool = True) -> str:
         access_token = st.secrets.get("WEATHERFLOW_ACCESSTOKEN")
         station_id = st.secrets.get("WEATHERFLOW_STATION_ID")
         
-        if not all([access_token, station_id]):
-            return "Error: WeatherFlow credentials not configured. Need WEATHERFLOW_ACCESSTOKEN and WEATHERFLOW_STATION_ID."
+        logger.debug(f"WeatherFlow config - Endpoint: {api_endpoint}")
+        logger.debug(f"WeatherFlow config - Token present: {bool(access_token)}")
+        logger.debug(f"WeatherFlow config - Station ID: {station_id}")
+        
+        if not access_token:
+            return "Error: WeatherFlow access token not found. Please check WEATHERFLOW_ACCESSTOKEN in secrets."
+        if not station_id:
+            return "Error: WeatherFlow station ID not found. Please check WEATHERFLOW_STATION_ID in secrets."
         
         logger.info(f"Fetching home weather from WeatherFlow station: {station_id}")
         
@@ -221,9 +227,20 @@ def get_home_weather(include_forecast: bool = True) -> str:
         obs_url = f"{api_endpoint}/observations/station/{station_id}"
         params = {"token": access_token}
         
+        logger.debug(f"WeatherFlow request URL: {obs_url}")
+        logger.debug(f"WeatherFlow request params: {params}")
+        
         obs_resp = requests.get(obs_url, params=params, timeout=15)
+        logger.debug(f"WeatherFlow response status: {obs_resp.status_code}")
+        logger.debug(f"WeatherFlow response headers: {dict(obs_resp.headers)}")
+        
+        if obs_resp.status_code != 200:
+            logger.error(f"WeatherFlow API error {obs_resp.status_code}: {obs_resp.text}")
+            return f"WeatherFlow API error {obs_resp.status_code}: {obs_resp.text[:200]}"
+        
         obs_resp.raise_for_status()
         obs_data = obs_resp.json()
+        logger.debug(f"WeatherFlow response data keys: {list(obs_data.keys()) if obs_data else 'None'}")
         
         if "obs" not in obs_data or not obs_data["obs"]:
             return "No recent observations available from your home weather station."
