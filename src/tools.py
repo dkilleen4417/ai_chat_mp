@@ -409,13 +409,13 @@ def get_home_weather(include_forecast: bool = True) -> str:
         
     except requests.exceptions.RequestException as e:
         logger.error(f"WeatherFlow API request failed: {str(e)}")
-        return "Sorry, I couldn't connect to your home weather station. Please check your internet connection."
+        return f"WeatherFlow API request failed: {str(e)}"
     except (KeyError, IndexError) as e:
         logger.error(f"Unexpected WeatherFlow response format: {str(e)}")
-        return "Error parsing data from your home weather station. The station may be offline or the data format has changed."
+        return f"WeatherFlow response format error: {str(e)}"
     except Exception as e:
         logger.error(f"Unexpected error in get_home_weather: {str(e)}", exc_info=True)
-        return "Sorry, an unexpected error occurred while fetching your home weather data."
+        return f"WeatherFlow error: {str(e)}"
 
 
 class ToolRegistry:
