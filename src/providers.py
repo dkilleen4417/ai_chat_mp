@@ -9,7 +9,7 @@ from typing import List, Dict, Any, Optional
 import streamlit as st
 from tools import tool_registry
 from logger import logger
-from config import OLLAMA_BASE_URL
+from config import OLLAMA_BASE_URL, OLLAMA_KEEP_ALIVE
 from utils import ResponseTimer, estimate_tokens, create_response_object
 
 
@@ -383,6 +383,24 @@ class OllamaProvider(BaseProvider):
         """Initialize HTTP client for Ollama"""
         self._client = None  # Using requests directly
     
+    def preload_model(self, model_name: str):
+        """Preload a model to keep it in memory"""
+        try:
+            url = f"{OLLAMA_BASE_URL}/api/generate"
+            payload = {
+                "model": model_name,
+                "prompt": "",
+                "stream": False,
+                "keep_alive": OLLAMA_KEEP_ALIVE
+            }
+            response = requests.post(url, json=payload, timeout=30)
+            if response.status_code == 200:
+                logger.info(f"Preloaded Ollama model: {model_name}")
+            else:
+                logger.warning(f"Failed to preload Ollama model {model_name}: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Could not preload Ollama model {model_name}: {e}")
+    
     def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> Dict[str, Any]:
         """Generate response using Ollama via HTTP with metrics"""
         with ResponseTimer() as timer:
@@ -427,6 +445,7 @@ class OllamaProvider(BaseProvider):
                     "model": model_config["name"],
                     "messages": ollama_messages,
                     "stream": False,
+                    "keep_alive": OLLAMA_KEEP_ALIVE,  # Keep model in memory to avoid reloading
                     "options": {
                         "temperature": model_config.get("temperature", 0.7),
                         "num_predict": model_config.get("max_output_tokens", 8192)

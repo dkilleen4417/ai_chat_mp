@@ -13,6 +13,7 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com"
 
 # --- Ollama Configuration ---
 OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_KEEP_ALIVE = "10m"  # Keep models in memory to avoid reloading
 
 # --- UI Configuration ---
 LLM_AVATAR = "🤖"
