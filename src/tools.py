@@ -248,6 +248,13 @@ Enhanced query (or return original if no enhancement needed):"""
         return original_query  # Always fallback to original
 
 
+def get_pws_current_conditions() -> str:
+    """Get CURRENT temperature, humidity, wind, and conditions from your personal WeatherFlow Tempest weather station.
+    Use this tool specifically for personal weather station data, home weather, or PWS readings.
+    """
+    return get_home_weather(include_forecast=False)
+
+
 def get_home_weather(include_forecast: bool = True) -> str:
     """Get current weather data from your personal WeatherFlow Tempest station.
     
@@ -530,6 +537,18 @@ tool_registry.register_tool(
     }
 )
 
+# Register PWS tool with very specific description
+tool_registry.register_tool(
+    get_pws_current_conditions,
+    "get_pws_current_conditions",
+    "Get CURRENT temperature, humidity, wind speed, and weather conditions from the user's PERSONAL WeatherFlow Tempest weather station. Use this for PWS data, home weather readings, personal weather station data.",
+    params_schema={
+        "type": "OBJECT",
+        "properties": {},
+        "required": []
+    }
+)
+
 tool_registry.register_tool(
     get_home_weather,
     "get_home_weather",
@@ -551,6 +570,7 @@ __all__ = [
     "brave_search",
     "serper_search",
     "get_weather_forecast",
+    "get_pws_current_conditions",
     "get_home_weather",
     "tool_registry",
     "ToolRegistry",
