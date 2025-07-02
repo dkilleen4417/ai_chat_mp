@@ -468,7 +468,7 @@ tool_registry.register_tool(
 tool_registry.register_tool(
     get_home_weather,
     "get_home_weather",
-    "Get current weather data from your personal WeatherFlow Tempest home weather station with hyper-local accuracy.",
+    "Get current weather data from the user's personal home weather station. Use this for questions about 'home weather', 'my weather station', 'personal weather station', or 'weather at home'.",
     params_schema={
         "type": "OBJECT",
         "properties": {
