@@ -47,6 +47,8 @@ A search is NOT required for:
     * *Example: "What is the key to happiness?"*
 4.  **General Conversational Prompts:** Greetings, simple questions about the AI, or requests for jokes.
     * *Example: "How are you today?"*
+5.  **Personal Weather Station Requests:** Questions about the user's own weather station, PWS, home weather, or personal weather data.
+    * *Example: "What's the temperature at my weather station?" or "Check my PWS" or "Home weather conditions"*
 
 ---
 **SEARCH PROVIDER SELECTION:**
