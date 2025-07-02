@@ -88,94 +88,260 @@ def serper_search(query: str, num_results: int = 3) -> str:
 
 
 def get_weather_forecast(location: str, days: int = 3) -> str:
-    """Get weather forecast for a location using National Weather Service API.
+    """Get weather forecast for any worldwide location using OpenWeatherMap API.
     
     Args:
-        location: City name, state (e.g., "Boston, MA") or ZIP code
-        days: Number of days to forecast (1-7)
+        location: City name, country (e.g., "London,UK" or "New York,US") or coordinates
+        days: Number of days to forecast (1-5)
     """
     try:
+        api_key = st.secrets.get("OPENWEATHER_API_KEY")
+        if not api_key:
+            return "Error: OpenWeatherMap API key not configured."
+        
         logger.info(f"Fetching weather for location: {location}")
         
-        # Try to get coordinates using OpenStreetMap Nominatim
-        geo_url = "https://nominatim.openstreetmap.org/search"
-        geo_params = {
+        # Get current weather and basic info
+        current_url = "https://api.openweathermap.org/data/2.5/weather"
+        current_params = {
             "q": location,
-            "format": "json",
-            "limit": 1
+            "appid": api_key,
+            "units": "imperial"  # Fahrenheit, mph
         }
         
-        logger.debug(f"Geocoding request: {geo_url}?{requests.compat.urlencode(geo_params)}")
-        geo_resp = requests.get(
-            geo_url, 
-            params=geo_params, 
-            headers={"User-Agent": "AIWeatherApp/1.0"},
-            timeout=10
-        )
-        geo_resp.raise_for_status()
-        geo_data = geo_resp.json()
+        current_resp = requests.get(current_url, params=current_params, timeout=10)
+        current_resp.raise_for_status()
+        current_data = current_resp.json()
         
-        if not geo_data:
-            logger.warning(f"No location found for: {location}")
-            return f"Could not find location: {location}. Please try being more specific (e.g., 'Boston, MA' or a ZIP code)."
-            
-        lat, lon = geo_data[0]["lat"], geo_data[0]["lon"]
-        logger.debug(f"Found coordinates: {lat}, {lon}")
+        if current_resp.status_code != 200:
+            return f"Could not find location: {location}. Please try a different format (e.g., 'City,Country')."
         
-        # Get weather forecast from National Weather Service
-        weather_url = f"https://api.weather.gov/points/{lat},{lon}"
-        headers = {
-            "User-Agent": "AIWeatherApp/1.0 (your-email@example.com)",
-            "Accept": "application/geo+json"
+        # Extract coordinates for forecast
+        lat = current_data["coord"]["lat"]
+        lon = current_data["coord"]["lon"]
+        city_name = current_data["name"]
+        country = current_data["sys"]["country"]
+        
+        # Get 5-day forecast
+        forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
+        forecast_params = {
+            "lat": lat,
+            "lon": lon,
+            "appid": api_key,
+            "units": "imperial"
         }
         
-        # Get forecast URL for this location
-        logger.debug(f"Fetching points data from: {weather_url}")
-        points_resp = requests.get(weather_url, headers=headers, timeout=15)
-        points_resp.raise_for_status()
-        points_data = points_resp.json()
-        
-        if "properties" not in points_data or "forecast" not in points_data["properties"]:
-            logger.error(f"Unexpected points data structure: {points_data}")
-            return "Error: Could not get forecast URL from weather service."
-            
-        forecast_url = points_data["properties"]["forecast"]
-        logger.debug(f"Fetching forecast from: {forecast_url}")
-        
-        # Get the actual forecast
-        forecast_resp = requests.get(forecast_url, headers=headers, timeout=15)
+        forecast_resp = requests.get(forecast_url, params=forecast_params, timeout=10)
         forecast_resp.raise_for_status()
         forecast_data = forecast_resp.json()
         
-        if "properties" not in forecast_data or "periods" not in forecast_data["properties"]:
-            logger.error(f"Unexpected forecast data structure: {forecast_data}")
-            return "Error: Could not parse forecast data from weather service."
+        # Format current weather
+        current_temp = round(current_data["main"]["temp"])
+        feels_like = round(current_data["main"]["feels_like"])
+        humidity = current_data["main"]["humidity"]
+        description = current_data["weather"][0]["description"].title()
+        wind_speed = round(current_data["wind"]["speed"])
         
-        # Format the forecast
-        periods = forecast_data["properties"]["periods"][:days*2]  # Two periods per day
+        result = [f"🌍 Weather for {city_name}, {country}:"]
+        result.append(f"Current: {current_temp}°F (feels like {feels_like}°F)")
+        result.append(f"{description}, Humidity: {humidity}%, Wind: {wind_speed} mph")
+        result.append("")
         
-        result = [f"🌦️ Weather for {location}:"]
-        for period in periods:
-            day = period.get("name", "Unknown")
-            temp = f"{period.get('temperature', 'N/A')}°{period.get('temperatureUnit', '')}"
-            forecast = period.get("shortForecast", "No forecast available")
-            wind = period.get("windSpeed", "N/A")
+        # Process forecast by day
+        daily_forecasts = {}
+        for item in forecast_data["list"][:days*8]:  # 8 forecasts per day (3-hour intervals)
+            date_str = item["dt_txt"].split()[0]  # Get date part
+            if date_str not in daily_forecasts:
+                daily_forecasts[date_str] = {
+                    "temps": [],
+                    "conditions": [],
+                    "date_obj": item["dt_txt"]
+                }
             
-            # Add umbrella recommendation if rain is in the forecast
+            daily_forecasts[date_str]["temps"].append(item["main"]["temp"])
+            daily_forecasts[date_str]["conditions"].append(item["weather"][0]["description"])
+        
+        # Format daily forecasts
+        result.append("📅 Forecast:")
+        for date_str, data in list(daily_forecasts.items())[:days]:
+            if not data["temps"]:
+                continue
+                
+            # Calculate high/low temps
+            high_temp = round(max(data["temps"]))
+            low_temp = round(min(data["temps"]))
+            
+            # Get most common condition
+            conditions = data["conditions"]
+            most_common = max(set(conditions), key=conditions.count).title()
+            
+            # Format date
+            from datetime import datetime
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            day_name = date_obj.strftime("%A")
+            
+            # Add umbrella if rain predicted
             umbrella = ""
-            if any(term in forecast.lower() for term in ["rain", "shower", "drizzle"]):
+            if any(term in most_common.lower() for term in ["rain", "shower", "drizzle"]):
                 umbrella = " ☔"
             
-            result.append(f"{day}: {temp}, {forecast}, Wind: {wind}{umbrella}")
+            result.append(f"{day_name}: {high_temp}°F/{low_temp}°F, {most_common}{umbrella}")
         
         return "\n".join(result)
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Weather API request failed: {str(e)}")
-        return "Sorry, I couldn't fetch the weather information. The weather service might be unavailable."
+        logger.error(f"OpenWeatherMap API request failed: {str(e)}")
+        return "Sorry, I couldn't fetch the weather information. Please check the location name or try again later."
+    except KeyError as e:
+        logger.error(f"Unexpected OpenWeatherMap response format: {str(e)}")
+        return f"Error parsing weather data. Please try a different location format (e.g., 'City,Country')."
     except Exception as e:
         logger.error(f"Unexpected error in get_weather_forecast: {str(e)}", exc_info=True)
         return "Sorry, an unexpected error occurred while fetching the weather. Please try again later."
+
+
+def get_home_weather(include_forecast: bool = True) -> str:
+    """Get current weather data from your personal WeatherFlow Tempest station.
+    
+    Args:
+        include_forecast: Whether to include 10-day forecast from WeatherFlow
+    """
+    try:
+        # Get credentials from secrets
+        api_endpoint = st.secrets.get("WEATHERFLOW_API_ENDPOINT", "https://swd.weatherflow.com/swd/rest")
+        access_token = st.secrets.get("WEATHERFLOW_ACCESSTOKEN")
+        station_id = st.secrets.get("WEATHERFLOW_STATION_ID")
+        
+        if not all([access_token, station_id]):
+            return "Error: WeatherFlow credentials not configured. Need WEATHERFLOW_ACCESSTOKEN and WEATHERFLOW_STATION_ID."
+        
+        logger.info(f"Fetching home weather from WeatherFlow station: {station_id}")
+        
+        # Get current station observations
+        obs_url = f"{api_endpoint}/observations/station/{station_id}"
+        params = {"token": access_token}
+        
+        obs_resp = requests.get(obs_url, params=params, timeout=15)
+        obs_resp.raise_for_status()
+        obs_data = obs_resp.json()
+        
+        if "obs" not in obs_data or not obs_data["obs"]:
+            return "No recent observations available from your home weather station."
+        
+        # Get the most recent observation
+        latest_obs = obs_data["obs"][0]
+        
+        # Parse observation data (WeatherFlow format)
+        # obs format: [timestamp, wind_lull, wind_avg, wind_gust, wind_direction, wind_sample_interval,
+        #              station_pressure, air_temperature, relative_humidity, illuminance, uv, solar_radiation,
+        #              rain_amount_prev_min, precipitation_type, lightning_strike_avg_distance,
+        #              lightning_strike_count, battery, report_interval]
+        
+        timestamp = latest_obs[0]
+        wind_avg = latest_obs[2]
+        wind_gust = latest_obs[3]
+        wind_direction = latest_obs[4]
+        pressure = latest_obs[6]
+        temp_c = latest_obs[7]
+        humidity = latest_obs[8]
+        uv = latest_obs[10]
+        rain_prev_min = latest_obs[12]
+        
+        # Convert Celsius to Fahrenheit
+        temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
+        
+        # Convert wind direction to compass
+        def wind_dir_to_compass(degrees):
+            if degrees is None:
+                return "N/A"
+            directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                         "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+            return directions[round(degrees / 22.5) % 16]
+        
+        # Format current conditions
+        from datetime import datetime
+        obs_time = datetime.fromtimestamp(timestamp).strftime("%I:%M %p")
+        
+        result = [f"🏠 Home Weather Station (as of {obs_time}):"]
+        
+        if temp_f is not None:
+            result.append(f"Temperature: {temp_f}°F ({temp_c:.1f}°C)")
+        
+        if humidity is not None:
+            result.append(f"Humidity: {humidity}%")
+        
+        if wind_avg is not None:
+            wind_dir_str = wind_dir_to_compass(wind_direction)
+            result.append(f"Wind: {wind_avg:.1f} mph from {wind_dir_str}")
+            if wind_gust is not None and wind_gust > wind_avg:
+                result.append(f"Wind Gusts: {wind_gust:.1f} mph")
+        
+        if pressure is not None:
+            # Convert mb to inHg
+            pressure_inhg = pressure * 0.02953
+            result.append(f"Pressure: {pressure:.1f} mb ({pressure_inhg:.2f} inHg)")
+        
+        if uv is not None:
+            uv_desc = ""
+            if uv <= 2:
+                uv_desc = " (Low)"
+            elif uv <= 5:
+                uv_desc = " (Moderate)"
+            elif uv <= 7:
+                uv_desc = " (High)"
+            elif uv <= 10:
+                uv_desc = " (Very High)"
+            else:
+                uv_desc = " (Extreme)"
+            result.append(f"UV Index: {uv:.1f}{uv_desc}")
+        
+        if rain_prev_min is not None and rain_prev_min > 0:
+            result.append(f"🌧️ Rain: {rain_prev_min:.2f} inches in last minute")
+        
+        # Get forecast if requested
+        if include_forecast:
+            try:
+                # Get station details for location
+                station_url = f"{api_endpoint}/stations/{station_id}"
+                station_resp = requests.get(station_url, params=params, timeout=10)
+                station_resp.raise_for_status()
+                station_data = station_resp.json()
+                
+                # WeatherFlow provides forecast data in station details
+                if "forecast" in station_data:
+                    result.append("")
+                    result.append("📅 10-Day Forecast:")
+                    
+                    forecast = station_data["forecast"]
+                    if "daily" in forecast:
+                        for day in forecast["daily"][:5]:  # Show 5 days
+                            day_name = datetime.fromtimestamp(day["day_start_local"]).strftime("%A")
+                            high = round(day["air_temp_high"])
+                            low = round(day["air_temp_low"])
+                            conditions = day.get("conditions", "Unknown")
+                            
+                            # Add rain indicator
+                            rain_icon = ""
+                            if day.get("precip_probability", 0) > 30:
+                                rain_icon = " ☔"
+                            
+                            result.append(f"{day_name}: {high}°F/{low}°F, {conditions}{rain_icon}")
+                        
+            except Exception as forecast_error:
+                logger.warning(f"Could not fetch forecast: {forecast_error}")
+                result.append("\n(Forecast unavailable)")
+        
+        return "\n".join(result)
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"WeatherFlow API request failed: {str(e)}")
+        return "Sorry, I couldn't connect to your home weather station. Please check your internet connection."
+    except (KeyError, IndexError) as e:
+        logger.error(f"Unexpected WeatherFlow response format: {str(e)}")
+        return "Error parsing data from your home weather station. The station may be offline or the data format has changed."
+    except Exception as e:
+        logger.error(f"Unexpected error in get_home_weather: {str(e)}", exc_info=True)
+        return "Sorry, an unexpected error occurred while fetching your home weather data."
 
 
 class ToolRegistry:
@@ -261,24 +427,40 @@ tool_registry.register_tool(
     "Search Google via Serper.dev."
 )
 
-# Register weather tool with custom parameter schema
+# Register weather tools with custom parameter schemas
 tool_registry.register_tool(
     get_weather_forecast,
     "get_weather_forecast",
-    "Get weather forecast for a location. Input should be a city name and state (e.g., 'Boston, MA') or ZIP code.",
+    "Get weather forecast for any worldwide location using OpenWeatherMap. Input should be city name, country (e.g., 'London,UK' or 'New York,US').",
     params_schema={
         "type": "OBJECT",
         "properties": {
             "location": {
                 "type": "string",
-                "description": "The location to get weather for (e.g., 'Boston, MA' or ZIP code)"
+                "description": "The location to get weather for (e.g., 'London,UK' or 'Tokyo,JP')"
             },
             "days": {
                 "type": "integer",
-                "description": "Number of days to forecast (1-7)"
+                "description": "Number of days to forecast (1-5)"
             }
         },
         "required": ["location"]
+    }
+)
+
+tool_registry.register_tool(
+    get_home_weather,
+    "get_home_weather",
+    "Get current weather data from your personal WeatherFlow Tempest home weather station with hyper-local accuracy.",
+    params_schema={
+        "type": "OBJECT",
+        "properties": {
+            "include_forecast": {
+                "type": "boolean",
+                "description": "Whether to include 10-day forecast (default: true)"
+            }
+        },
+        "required": []
     }
 )
 
@@ -286,6 +468,7 @@ __all__ = [
     "brave_search",
     "serper_search",
     "get_weather_forecast",
+    "get_home_weather",
     "tool_registry",
     "ToolRegistry",
 ]
