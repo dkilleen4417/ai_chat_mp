@@ -321,12 +321,16 @@ def get_home_weather(include_forecast: bool = True) -> str:
         uv = latest_obs[10] if len(latest_obs) > 10 else None
         rain_prev_min = latest_obs[12] if len(latest_obs) > 12 else None
         
+        # Debug logging for key values
+        logger.debug(f"Parsed values - timestamp: {timestamp}, temp_c: {temp_c}, humidity: {humidity}, wind_avg: {wind_avg}")
+        logger.debug(f"First 15 obs values: {latest_obs[:15]}")
+        
         # Convert Celsius to Fahrenheit
         temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
         
         # Convert wind direction to compass
         def wind_dir_to_compass(degrees):
-            if degrees is None:
+            if degrees is None or degrees == 0:
                 return "N/A"
             directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
                          "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
@@ -334,7 +338,13 @@ def get_home_weather(include_forecast: bool = True) -> str:
         
         # Format current conditions
         from datetime import datetime
-        obs_time = datetime.fromtimestamp(timestamp).strftime("%I:%M %p")
+        try:
+            if timestamp and timestamp > 0:
+                obs_time = datetime.fromtimestamp(timestamp).strftime("%I:%M %p")
+            else:
+                obs_time = "Unknown"
+        except (ValueError, OSError):
+            obs_time = "Invalid timestamp"
         
         result = [f"🏠 Home Weather Station (as of {obs_time}):"]
         
