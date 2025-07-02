@@ -304,20 +304,22 @@ def get_home_weather(include_forecast: bool = True) -> str:
         latest_obs = obs_data["obs"][0]
         
         # Parse observation data (WeatherFlow format)
-        # obs format: [timestamp, wind_lull, wind_avg, wind_gust, wind_direction, wind_sample_interval,
-        #              station_pressure, air_temperature, relative_humidity, illuminance, uv, solar_radiation,
-        #              rain_amount_prev_min, precipitation_type, lightning_strike_avg_distance,
-        #              lightning_strike_count, battery, report_interval]
+        # The obs array has more fields than expected (37 vs 18)
+        # Let's be defensive and check array length
+        logger.debug(f"Observation data has {len(latest_obs)} fields")
+        
+        if len(latest_obs) < 13:
+            return "Error: Observation data format unexpected from WeatherFlow station."
         
         timestamp = latest_obs[0]
-        wind_avg = latest_obs[2]
-        wind_gust = latest_obs[3]
-        wind_direction = latest_obs[4]
-        pressure = latest_obs[6]
-        temp_c = latest_obs[7]
-        humidity = latest_obs[8]
-        uv = latest_obs[10]
-        rain_prev_min = latest_obs[12]
+        wind_avg = latest_obs[2] if len(latest_obs) > 2 else None
+        wind_gust = latest_obs[3] if len(latest_obs) > 3 else None
+        wind_direction = latest_obs[4] if len(latest_obs) > 4 else None
+        pressure = latest_obs[6] if len(latest_obs) > 6 else None
+        temp_c = latest_obs[7] if len(latest_obs) > 7 else None
+        humidity = latest_obs[8] if len(latest_obs) > 8 else None
+        uv = latest_obs[10] if len(latest_obs) > 10 else None
+        rain_prev_min = latest_obs[12] if len(latest_obs) > 12 else None
         
         # Convert Celsius to Fahrenheit
         temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
