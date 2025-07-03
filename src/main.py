@@ -10,6 +10,7 @@ from logger import logger
 from providers import initialize_provider_manager, generate_chat_response_with_providers
 from query_optimizer import optimize_search_query
 from search_manager import SearchManager
+from intelligent_router import intelligent_router, RouteType
 import ui
 from ui import (
     render_chat,
@@ -71,27 +72,36 @@ def set_decision_model():
         }
     )
 
-def apply_grounding(prompt: str) -> tuple[bool, str]:
-    """Determine if a search is needed for the given prompt and which provider to use."""
-    messages = [
-        {"role": "user", "parts": [config.SEARCH_GROUNDING_SYSTEM_PROMPT, f"User message: {prompt}"]},
-    ]
-    
+def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
+    """Use intelligent router to determine the best approach for the query."""
     try:
-        response = ss.decision_model.generate_content(contents=messages)
-        decision = json.loads(response.text)
-        needs_search = decision.get("needs_search", False)
-        # Default to 'serper' if not specified
-        search_provider = decision.get("search_provider", "serper").lower()
-        # Ensure we only return valid providers
-        if search_provider not in ["serper", "brave"]:
-            search_provider = "serper"
-        reasoning = decision.get("reasoning", "No reasoning provided.")
-        logger.debug(f"Search decision: {needs_search}, Provider: {search_provider}, Reason: {reasoning}")
-        return needs_search, search_provider
+        # Get routing decision
+        decision = intelligent_router.make_routing_decision(prompt)
+        
+        logger.debug(f"Intelligent routing decision: {decision.route_type.value}")
+        logger.debug(f"Primary tool: {decision.primary_tool}, Confidence: {decision.confidence:.2f}")
+        logger.debug(f"Reasoning: {decision.reasoning}")
+        
+        # Convert routing decision to search parameters
+        if decision.route_type == RouteType.SEARCH_FIRST:
+            # Search first, then maybe tools
+            return True, "serper", "search_first"
+        elif decision.route_type == RouteType.TOOL_WITH_SEARCH:
+            # Use tool but verify with search
+            return True, "serper", "tool_with_search"
+        elif decision.route_type == RouteType.TOOL_DIRECT:
+            # Use tool directly, no search needed
+            return False, "", "tool_direct"
+        elif decision.route_type == RouteType.MODEL_KNOWLEDGE:
+            # Use model knowledge, no search or tools
+            return False, "", "model_knowledge"
+        else:
+            # Fallback
+            return False, "", "combined"
+            
     except Exception as e:
-        logger.error(f"Error in grounding decision: {e}")
-        return True, "serper"  # Default to serper on error
+        logger.error(f"Error in intelligent routing: {e}")
+        return False, "", "error_fallback"  # Default to no search on error
 
 def initialize():
     # ================ Session State Initialization ================
@@ -112,10 +122,10 @@ def initialize():
     # Initialize provider manager instead of individual model setup
     initialize_provider_manager()
     
-    # Keep decision model for search grounding
+    # Keep decision model for search grounding (legacy, now using intelligent router)
     genai.configure(api_key=ss.gemini_api_key)
     set_decision_model()
-    ss.apply_grounding = apply_grounding
+    ss.apply_intelligent_routing = apply_intelligent_routing
 
 
 
@@ -170,7 +180,7 @@ def main():
                 ss.db,
                 ss.provider_manager,
                 SearchManager(),
-                apply_grounding,
+                apply_intelligent_routing,
                 optimize_search_query,
                 generate_chat_response_with_providers,
             ),

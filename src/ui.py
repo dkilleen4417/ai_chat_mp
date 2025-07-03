@@ -110,7 +110,7 @@ def render_new(db, provider_manager):
         st.session_state.app_mode = "chat"
         st.rerun()
 
-def render_chat(db, provider_manager, search_manager, apply_grounding, optimize_search_query, generate_chat_response_with_providers):
+def render_chat(db, provider_manager, search_manager, apply_intelligent_routing, optimize_search_query, generate_chat_response_with_providers):
     st.title(f"💬 {st.session_state.active_chat['name']}")
     message_container = st.container(height=600, border=True)
 
@@ -133,7 +133,7 @@ def render_chat(db, provider_manager, search_manager, apply_grounding, optimize_
         with message_container.chat_message("user", avatar=st.session_state.user_avatar):
             st.markdown(prompt)
 
-        needs_search, search_provider = apply_grounding(prompt)
+        needs_search, search_provider, routing_type = apply_intelligent_routing(prompt)
         search_results_text = None
 
         if needs_search:
