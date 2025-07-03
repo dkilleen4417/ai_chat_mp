@@ -2,6 +2,7 @@ import streamlit as st
 from time import time as current_time, sleep
 from logger import logger
 from utils import format_response_metrics
+import debug_panel
 
 def show_notification(message, type="success"):
     icon = "✅" if type == "success" else "❌"
@@ -137,22 +138,33 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
         search_results_text = None
 
         if needs_search:
+            from main import add_debug_log
+            add_debug_log(f"🔍 Search initiated for: '{prompt[:50]}...'")
+            
             with st.spinner(f"Optimizing search query..."):
                 optimized_prompt = optimize_search_query(prompt)
                 logger.debug(f"Original query: {prompt} -> Optimized: {optimized_prompt}")
+                add_debug_log(f"📝 Query optimized: '{optimized_prompt[:50]}...'")
                 
             with st.spinner("Searching for best results..."):
                 search_results, score, engine_used = search_manager.search_with_fallback(optimized_prompt)
+                add_debug_log(f"🔍 Search engine: {engine_used}, Score: {score:.1f}/10")
                 
                 if score < 3.0:
                     logger.debug("Poor search results, trying original query")
+                    add_debug_log("⚠️ Poor results, retrying with original query")
                     search_results, score, engine_used = search_manager.search_with_fallback(prompt)
+                    add_debug_log(f"🔄 Retry result: {engine_used}, Score: {score:.1f}/10")
                 
                 logger.info(f"Best result from {engine_used} with score {score:.1f}/10")
                 search_results_text = search_results if score > 2.0 else "No relevant search results found."
+                add_debug_log(f"✅ Search completed: {'Results found' if score > 2.0 else 'No relevant results'}")
         
         with st.spinner("🤖 Thinking..."):
+            from main import add_debug_log
+            add_debug_log("🤖 Generating AI response...")
             response_obj = generate_chat_response_with_providers(search_results=search_results_text)
+            add_debug_log("✅ AI response generated successfully")
 
         # Handle structured response format
         if isinstance(response_obj, dict) and "text" in response_obj:
@@ -497,10 +509,11 @@ def manage_UI(db):
     if col2.button("🧹", help="Clear active chat history", use_container_width=True): st.session_state.app_mode = "clear_chat"
     if col3.button("🗑️", help="Delete active chat", use_container_width=True): st.session_state.app_mode = "delete_chat"
 
-    colA, colB, colC = st.sidebar.columns(3)
+    colA, colB, colC, colD = st.sidebar.columns(4)
     if colA.button("🆕", help="New chat", use_container_width=True): st.session_state.app_mode = "new_chat"
     if colB.button("⚙️", help="Manage models", use_container_width=True): st.session_state.app_mode = "models"
     if colC.button("📂", help="Manage chat archiving", use_container_width=True): st.session_state.app_mode = "archive"
+    if colD.button("🐞", help="Debug panel - View internal agent conversations", use_container_width=True): st.session_state.app_mode = "debug"
 
     chat_docs_for_options = make_chat_list(db)
     st.sidebar.markdown("### Select Chat")
@@ -533,6 +546,11 @@ def manage_UI(db):
         index=default_index, key="chat_selector_name", on_change=handle_chat_selection,
         label_visibility="collapsed"
     )
+    
+
+def render_debug_panel():
+    """Render the debug panel"""
+    debug_panel.render_debug_panel()
 
 def make_chat_list(db):
     scratch_pad_filter = {"name": "Scratch Pad", "archived": False}

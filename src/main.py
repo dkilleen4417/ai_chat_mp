@@ -32,6 +32,23 @@ st.set_page_config(
 
 ss = st.session_state
 
+def add_debug_log(message: str):
+    """Add a message to the debug log panel"""
+    if 'debug_logs' not in ss:
+        ss.debug_logs = []
+    
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    ss.debug_logs.append(f"[{timestamp}] {message}")
+    
+    # Keep only last 100 entries
+    if len(ss.debug_logs) > 100:
+        ss.debug_logs = ss.debug_logs[-100:]
+
+def clear_debug_logs():
+    """Clear all debug logs"""
+    ss.debug_logs = []
+
 def get_database():
     """Connects to MongoDB using credentials from config.py"""
     try:
@@ -78,28 +95,36 @@ def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
         # Get routing decision
         decision = intelligent_router.make_routing_decision(prompt)
         
+        # Log to debug panel
+        add_debug_log(f"🧠 Router Decision: {decision.route_type.value}")
+        add_debug_log(f"🔧 Primary Tool: {decision.primary_tool or 'None'}")
+        add_debug_log(f"📊 Confidence: {decision.confidence:.2f}")
+        add_debug_log(f"💭 Reasoning: {decision.reasoning}")
+        
+        # Also log to regular logger
         logger.debug(f"Intelligent routing decision: {decision.route_type.value}")
         logger.debug(f"Primary tool: {decision.primary_tool}, Confidence: {decision.confidence:.2f}")
         logger.debug(f"Reasoning: {decision.reasoning}")
         
         # Convert routing decision to search parameters
         if decision.route_type == RouteType.SEARCH_FIRST:
-            # Search first, then maybe tools
+            add_debug_log("🔍 Action: Search first, then maybe tools")
             return True, "serper", "search_first"
         elif decision.route_type == RouteType.TOOL_WITH_SEARCH:
-            # Use tool but verify with search
+            add_debug_log("🔍🔧 Action: Use tool but verify with search")
             return True, "serper", "tool_with_search"
         elif decision.route_type == RouteType.TOOL_DIRECT:
-            # Use tool directly, no search needed
+            add_debug_log("🔧 Action: Use tool directly, no search needed")
             return False, "", "tool_direct"
         elif decision.route_type == RouteType.MODEL_KNOWLEDGE:
-            # Use model knowledge, no search or tools
+            add_debug_log("🤖 Action: Use model knowledge, no search or tools")
             return False, "", "model_knowledge"
         else:
-            # Fallback
+            add_debug_log("🔄 Action: Fallback to combined approach")
             return False, "", "combined"
             
     except Exception as e:
+        add_debug_log(f"❌ Router Error: {e}")
         logger.error(f"Error in intelligent routing: {e}")
         return False, "", "error_fallback"  # Default to no search on error
 
@@ -189,6 +214,7 @@ def main():
             "delete_chat": lambda: ui.render_delete(ss.db),
             "archive": lambda: ui.render_archive(ss.db),
             "models": lambda: ui.render_models(ss.db),
+            "debug": lambda: ui.render_debug_panel(),
         }
 
         # Render the main UI components
