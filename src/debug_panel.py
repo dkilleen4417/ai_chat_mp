@@ -49,15 +49,26 @@ def render_debug_panel():
                 logs_to_show = reversed(logs_to_show)
             
             for log_entry in logs_to_show:
+                # Handle separators
+                if log_entry.startswith("==="):
+                    st.divider()
+                    continue
+                
                 # Color coding based on log content
                 if "❌" in log_entry:
                     st.error(log_entry)
+                elif "❓" in log_entry or "User Question" in log_entry:
+                    st.markdown(f"**{log_entry}**")  # Bold for user questions
                 elif "🧠" in log_entry or "Router Decision" in log_entry:
                     st.info(log_entry)
                 elif "🔧" in log_entry or "Tool" in log_entry:
                     st.success(log_entry)
                 elif "🔍" in log_entry or "Search" in log_entry:
                     st.warning(log_entry)
+                elif "🤖 AI Response" in log_entry:
+                    st.markdown(f"**{log_entry}**")  # Bold for AI responses
+                elif "⚡" in log_entry or "📊" in log_entry:
+                    st.caption(log_entry)  # Smaller text for metrics
                 elif "📊" in log_entry or "Confidence" in log_entry:
                     st.metric("", log_entry.split("] ")[1] if "] " in log_entry else log_entry)
                 else:

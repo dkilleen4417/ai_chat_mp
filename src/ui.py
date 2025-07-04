@@ -2,7 +2,9 @@ import streamlit as st
 from time import time as current_time, sleep
 from logger import logger
 from utils import format_response_metrics
+from debug_utils import add_debug_log
 import debug_panel
+import config
 
 def show_notification(message, type="success"):
     icon = "✅" if type == "success" else "❌"
@@ -138,7 +140,6 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
         search_results_text = None
 
         if needs_search:
-            from main import add_debug_log
             add_debug_log(f"🔍 Search initiated for: '{prompt[:50]}...'")
             
             with st.spinner(f"Optimizing search query..."):
@@ -161,7 +162,6 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
                 add_debug_log(f"✅ Search completed: {'Results found' if score > 2.0 else 'No relevant results'}")
         
         with st.spinner("🤖 Thinking..."):
-            from main import add_debug_log
             add_debug_log("🤖 Generating AI response...")
             response_obj = generate_chat_response_with_providers(search_results=search_results_text)
             add_debug_log("✅ AI response generated successfully")
@@ -172,6 +172,17 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
         else:
             # Fallback for old format
             response_text = response_obj
+        
+        # Log the AI response to debug panel
+        add_debug_log(f"🤖 AI Response: {response_text[:200]}{'...' if len(response_text) > 200 else ''}")
+        
+        # Log response metrics if available
+        if isinstance(response_obj, dict) and response_obj.get("metrics"):
+            metrics = response_obj["metrics"]
+            add_debug_log(f"⚡ Response Time: {metrics.get('response_time', 0):.2f}s")
+            add_debug_log(f"📊 Tokens: {metrics.get('input_tokens', 0)} in, {metrics.get('output_tokens', 0)} out")
+        
+        add_debug_log("=" * 60)
 
         with message_container.chat_message("assistant", avatar=st.session_state.llm_avatar):
             if search_results_text:
@@ -454,7 +465,7 @@ def render_models(db):
         scratch_pad_chat = db.chats.find_one({"name": "Scratch Pad"})
         scratch_pad_model = scratch_pad_chat.get("model") if scratch_pad_chat else None
         
-        protected_models = [st.session_state.DEFAULT_MODEL, st.session_state.DECISION_MODEL]
+        protected_models = [config.DEFAULT_MODEL, config.DECISION_MODEL]
         if scratch_pad_model:
             protected_models.append(scratch_pad_model)
         
@@ -509,11 +520,18 @@ def manage_UI(db):
     if col2.button("🧹", help="Clear active chat history", use_container_width=True): st.session_state.app_mode = "clear_chat"
     if col3.button("🗑️", help="Delete active chat", use_container_width=True): st.session_state.app_mode = "delete_chat"
 
+    # First row - 4 buttons
     colA, colB, colC, colD = st.sidebar.columns(4)
     if colA.button("🆕", help="New chat", use_container_width=True): st.session_state.app_mode = "new_chat"
     if colB.button("⚙️", help="Manage models", use_container_width=True): st.session_state.app_mode = "models"
     if colC.button("📂", help="Manage chat archiving", use_container_width=True): st.session_state.app_mode = "archive"
     if colD.button("🐞", help="Debug panel - View internal agent conversations", use_container_width=True): st.session_state.app_mode = "debug"
+    
+    # Second row - User profile button (centered)
+    col_spacer1, col_profile, col_spacer2 = st.sidebar.columns([1, 2, 1])
+    with col_profile:
+        if st.button("👤 Profile", help="Manage user profile and personalization", use_container_width=True): 
+            st.session_state.app_mode = "profile"
 
     chat_docs_for_options = make_chat_list(db)
     st.sidebar.markdown("### Select Chat")
@@ -551,6 +569,11 @@ def manage_UI(db):
 def render_debug_panel():
     """Render the debug panel"""
     debug_panel.render_debug_panel()
+
+def render_profile():
+    """Render the user profile management interface"""
+    import profile_ui
+    profile_ui.render_user_profile()
 
 def make_chat_list(db):
     scratch_pad_filter = {"name": "Scratch Pad", "archived": False}

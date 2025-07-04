@@ -11,6 +11,7 @@ from providers import initialize_provider_manager, generate_chat_response_with_p
 from query_optimizer import optimize_search_query
 from search_manager import SearchManager
 from intelligent_router import intelligent_router, RouteType
+from debug_utils import add_debug_log, clear_debug_logs
 import ui
 from ui import (
     render_chat,
@@ -31,23 +32,6 @@ st.set_page_config(
 )
 
 ss = st.session_state
-
-def add_debug_log(message: str):
-    """Add a message to the debug log panel"""
-    if 'debug_logs' not in ss:
-        ss.debug_logs = []
-    
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-    ss.debug_logs.append(f"[{timestamp}] {message}")
-    
-    # Keep only last 100 entries
-    if len(ss.debug_logs) > 100:
-        ss.debug_logs = ss.debug_logs[-100:]
-
-def clear_debug_logs():
-    """Clear all debug logs"""
-    ss.debug_logs = []
 
 def get_database():
     """Connects to MongoDB using credentials from config.py"""
@@ -92,6 +76,11 @@ def set_decision_model():
 def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
     """Use intelligent router to determine the best approach for the query."""
     try:
+        # Log the user question first
+        add_debug_log("=" * 60)
+        add_debug_log(f"❓ User Question: {prompt}")
+        add_debug_log("=" * 60)
+        
         # Get routing decision
         decision = intelligent_router.make_routing_decision(prompt)
         
@@ -106,7 +95,11 @@ def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
         logger.debug(f"Primary tool: {decision.primary_tool}, Confidence: {decision.confidence:.2f}")
         logger.debug(f"Reasoning: {decision.reasoning}")
         
-        # Convert routing decision to search parameters
+        # Check model capabilities for tool routing
+        model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
+        model_capabilities = model_config.get("capabilities", []) if model_config else []
+        
+        # Convert routing decision to search parameters with capability awareness
         if decision.route_type == RouteType.SEARCH_FIRST:
             add_debug_log("🔍 Action: Search first, then maybe tools")
             return True, "serper", "search_first"
@@ -114,8 +107,13 @@ def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
             add_debug_log("🔍🔧 Action: Use tool but verify with search")
             return True, "serper", "tool_with_search"
         elif decision.route_type == RouteType.TOOL_DIRECT:
-            add_debug_log("🔧 Action: Use tool directly, no search needed")
-            return False, "", "tool_direct"
+            # Check if model can actually handle function calling
+            if "function_calling" in model_capabilities:
+                add_debug_log("🔧 Action: Use tool directly (model supports function calling)")
+                return False, "", "tool_direct"
+            else:
+                add_debug_log("⚠️ Model lacks function calling - fallback to search + context")
+                return True, "serper", "tool_fallback_search"
         elif decision.route_type == RouteType.MODEL_KNOWLEDGE:
             add_debug_log("🤖 Action: Use model knowledge, no search or tools")
             return False, "", "model_knowledge"
@@ -215,6 +213,7 @@ def main():
             "archive": lambda: ui.render_archive(ss.db),
             "models": lambda: ui.render_models(ss.db),
             "debug": lambda: ui.render_debug_panel(),
+            "profile": lambda: ui.render_profile(),
         }
 
         # Render the main UI components

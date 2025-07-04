@@ -1,0 +1,15 @@
+
+# MongoDB Restore Instructions
+# Created: 2025-07-03 17:29:05
+
+## To restore this backup:
+
+1. Stop your application
+2. Run the restore command:
+   mongorestore --uri mongodb://localhost:27017/ --db ai_chat_mp --drop /Users/drew/projects/ai_chat_mp/mongodb_backup_20250703_172905/ai_chat_mp
+
+## To restore just the models collection:
+   mongorestore --uri mongodb://localhost:27017/ --db ai_chat_mp --collection models --drop /Users/drew/projects/ai_chat_mp/mongodb_backup_20250703_172905/ai_chat_mp/models.bson
+
+## Backup created before capability system updates
+## Original backup location: /Users/drew/projects/ai_chat_mp/mongodb_backup_20250703_172905
