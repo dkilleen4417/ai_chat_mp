@@ -10,7 +10,7 @@ from logger import logger
 from providers import initialize_provider_manager, generate_chat_response_with_providers
 from query_optimizer import optimize_search_query
 from search_manager import SearchManager
-from intelligent_router import intelligent_router, RouteType
+from llm_intelligent_router import llm_intelligent_router as intelligent_router, RouteType
 from debug_utils import add_debug_log, clear_debug_logs
 import ui
 from ui import (

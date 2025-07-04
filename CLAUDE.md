@@ -9,7 +9,8 @@
 ## Project Context
 - **Project**: AI Chat MP - Advanced AI chat application with intelligent query routing
 - **Main Branch**: `master` (stable version with debug panel)
-- **Features**: Intelligent routing, dual weather systems, debug panel for internal conversations
+- **Current Branch**: `add-grok-provider` (recently committed and pushed)
+- **Features**: Intelligent routing, dual weather systems, debug panel for internal conversations, Grok provider support
 
 ## Development Guidelines
 - Always use `python3` for Python execution on this Mac Studio
@@ -27,7 +28,9 @@
 - **🌡️ Dual Weather System**: OpenWeatherMap + WeatherFlow Tempest personal weather station
 - **🐞 Debug Panel**: Shows internal agent conversations and routing decisions  
 - **🔍 Advanced Search**: Brave + Serper with intelligent fallback
-- **🤖 Multiple AI Providers**: Google Gemini, Anthropic Claude, Ollama
+- **🤖 Multiple AI Providers**: Google Gemini, Anthropic Claude, Ollama, xAI Grok
+- **👤 User Profile**: Personalization and context enhancement
+- **⚡ Enhanced Debug Logging**: Question/response tracking with metrics
 
 ## File Structure
 - `src/main.py` - Application entry point with debug logging

@@ -673,6 +673,180 @@ class GrokProvider(BaseProvider):
         )
 
 
+class OpenAIProvider(BaseProvider):
+    """Provider for OpenAI GPT models"""
+    
+    def initialize_client(self):
+        """Initialize HTTP client for OpenAI API"""
+        self._client = None
+    
+    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> Dict[str, Any]:
+        """Generate response using OpenAI GPT via HTTP with metrics"""
+        with ResponseTimer() as timer:
+            try:
+                # Calculate input tokens for metrics (current user message only)
+                current_user_message = messages[-1].get("content", "") if messages else ""
+                input_text = current_user_message
+                if search_results:
+                    input_text += search_results
+                input_tokens = estimate_tokens(input_text)
+                
+                # OpenAI API endpoint
+                url = "https://api.openai.com/v1/chat/completions"
+                
+                # Headers
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Process messages for OpenAI format
+                api_messages = []
+                
+                # Enhance system prompt with user context
+                from prompt_enhancer import enhance_system_prompt
+                original_system_prompt = model_config.get("system_prompt", "")
+                system_prompt = enhance_system_prompt(original_system_prompt)
+                
+                # Add system prompt if present
+                if system_prompt:
+                    api_messages.append({
+                        "role": "system",
+                        "content": system_prompt
+                    })
+                
+                # Add conversation history
+                for msg in messages:
+                    api_messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+                
+                # Add search results if provided
+                if search_results:
+                    api_messages.append({
+                        "role": "user",
+                        "content": f"Here are the search results to help you answer:\n\n{search_results}"
+                    })
+                
+                # Prepare payload
+                payload = {
+                    "model": model_config["name"],
+                    "messages": api_messages,
+                    "max_tokens": model_config.get("max_output_tokens", 16384),
+                    "temperature": model_config.get("temperature", 0.7),
+                    "top_p": model_config.get("top_p", 0.9),
+                    "stream": False
+                }
+                
+                logger.debug(f"Sending request to OpenAI: {url}")
+                logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
+                
+                # Make the request
+                response = requests.post(url, headers=headers, json=payload, timeout=60)
+                
+                if response.status_code != 200:
+                    error_msg = f"OpenAI API error {response.status_code}: {response.text}"
+                    logger.error(error_msg)
+                    return create_response_object(f"API Error: {error_msg}", None)
+                
+                response_data = response.json()
+                logger.debug(f"OpenAI response: {json.dumps(response_data, indent=2)}")
+                
+                # Extract response text
+                if "choices" not in response_data or not response_data["choices"]:
+                    return create_response_object("No response from OpenAI", None)
+                
+                choice = response_data["choices"][0]
+                response_text = choice["message"]["content"]
+                
+                # Extract usage data (actual tokens from API)
+                usage = response_data.get("usage", {})
+                actual_input_tokens = usage.get("prompt_tokens", input_tokens)
+                actual_output_tokens = usage.get("completion_tokens", estimate_tokens(response_text))
+                total_tokens = usage.get("total_tokens", actual_input_tokens + actual_output_tokens)
+                
+                # Create metrics
+                metrics = {
+                    "response_time": timer.elapsed_time,
+                    "input_tokens": actual_input_tokens,
+                    "output_tokens": actual_output_tokens,
+                    "total_tokens": total_tokens,
+                    "estimated": []  # OpenAI provides actual token counts
+                }
+                
+                return create_response_object(response_text, metrics)
+                
+            except requests.exceptions.Timeout:
+                return create_response_object("Request timed out. Please try again.", None)
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Network error with OpenAI API: {e}")
+                return create_response_object(f"Network error: {str(e)}", None)
+            except Exception as e:
+                logger.error(f"Unexpected error with OpenAI: {e}")
+                return create_response_object(f"Error: {str(e)}", None)
+    
+    def get_available_models(self) -> List[Dict]:
+        """Get available OpenAI models"""
+        return [
+            {
+                "name": "gpt-4o",
+                "provider": "openai",
+                "description": "Most capable OpenAI model with vision and function calling",
+                "context_length": 128000,
+                "max_output_tokens": 16384,
+                "supports_vision": True,
+                "supports_tools": True
+            },
+            {
+                "name": "gpt-4o-mini",
+                "provider": "openai",
+                "description": "Lightweight GPT-4o model optimized for speed and cost",
+                "context_length": 128000,
+                "max_output_tokens": 16384,
+                "supports_vision": True,
+                "supports_tools": True
+            },
+            {
+                "name": "gpt-4.1",
+                "provider": "openai",
+                "description": "Latest GPT-4.1 model with enhanced capabilities",
+                "context_length": 1000000,
+                "max_output_tokens": 16384,
+                "supports_vision": True,
+                "supports_tools": True
+            },
+            {
+                "name": "gpt-4.1-mini",
+                "provider": "openai",
+                "description": "Efficient GPT-4.1 model with large context",
+                "context_length": 1000000,
+                "max_output_tokens": 16384,
+                "supports_vision": True,
+                "supports_tools": True
+            },
+            {
+                "name": "gpt-4.1-nano",
+                "provider": "openai",
+                "description": "Ultra-efficient GPT-4.1 model for simple tasks",
+                "context_length": 128000,
+                "max_output_tokens": 8192,
+                "supports_vision": False,
+                "supports_tools": True
+            }
+        ]
+    
+    def validate_model_config(self, config: Dict) -> bool:
+        """Validate OpenAI model configuration"""
+        required_fields = ["name", "provider"]
+        valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"]
+        return (
+            all(field in config for field in required_fields) and
+            config.get("name") in valid_models and
+            config.get("provider") == "openai"
+        )
+
+
 class ProviderManager:
     """Manages all AI providers"""
     
@@ -685,6 +859,7 @@ class ProviderManager:
         google_key = st.secrets.get("GEMINI_API_KEY")
         anthropic_key = st.secrets.get("ANTHROPIC_API_KEY")
         grok_key = st.secrets.get("XAI_API_KEY")
+        openai_key = st.secrets.get("OPENAI_API_KEY")
         
         if google_key:
             self.providers["google"] = GoogleProvider(google_key)
@@ -695,6 +870,10 @@ class ProviderManager:
         if grok_key:
             self.providers["grok"] = GrokProvider(grok_key)
             logger.info("Grok provider initialized successfully")
+        
+        if openai_key:
+            self.providers["openai"] = OpenAIProvider(openai_key)
+            logger.info("OpenAI provider initialized successfully")
         
         # Initialize Ollama provider (no API key needed)
         try:

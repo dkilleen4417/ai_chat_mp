@@ -10,7 +10,7 @@ if not logger.handlers:
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(name)s: %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    # Default to DEBUG; change to INFO in production
-    logger.setLevel(logging.DEBUG)
+    # Set to WARNING to reduce terminal noise (use debug panel for debugging)
+    logger.setLevel(logging.WARNING)
 
 __all__ = ["logger"]
