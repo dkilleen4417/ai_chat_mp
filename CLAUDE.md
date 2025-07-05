@@ -29,6 +29,7 @@
 1. **Create MongoDB Backup**
    ```bash
    mongodump --db ai_chat_mp --out temp_backup
+   mkdir -p mongo_backups
    rm -rf mongo_backups/mongo_sync
    mv temp_backup/ai_chat_mp mongo_backups/mongo_sync
    rm -rf temp_backup
