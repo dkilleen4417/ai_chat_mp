@@ -1,0 +1,75 @@
+# MongoDB Atlas Restore Instructions
+
+## Database Backup Details
+- **Source**: Local MongoDB ai_chat_mp database
+- **Date**: 2025-07-05 00:11:33
+- **Collections**: 
+  - chats (2 documents)
+  - models (25 documents) 
+  - prompts (4 documents)
+  - users (2 documents)
+
+## Atlas Restore Process
+
+### Method 1: Using MongoDB Tools (Recommended)
+```bash
+# Install MongoDB Database Tools if not already installed
+# On macOS: brew install mongodb/brew/mongodb-database-tools
+
+# Restore to Atlas (replace with your Atlas connection string)
+mongorestore --uri "mongodb+srv://username:password@cluster.mongodb.net/ai_chat_mp" ./ai_chat_mp/
+```
+
+### Method 2: Using MongoDB Compass
+1. Open MongoDB Compass
+2. Connect to your Atlas cluster
+3. Create database: ai_chat_mp
+4. For each collection:
+   - Create collection (chats, models, prompts, users)
+   - Import data from corresponding .bson files
+
+### Method 3: Using Atlas UI
+1. Go to your Atlas cluster
+2. Click "Collections" tab
+3. Click "Add My Own Data"
+4. Create database: ai_chat_mp
+5. Use "Insert Document" to add data from .bson files
+
+## Application Configuration Changes
+
+### Update Connection String
+In your `.streamlit/secrets.toml`:
+```toml
+# Replace local MongoDB connection
+MONGODB_URI = "mongodb+srv://username:password@cluster.mongodb.net/ai_chat_mp?retryWrites=true&w=majority"
+```
+
+### Update src/config.py (if needed)
+```python
+# Add Atlas connection support
+import os
+MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/ai_chat_mp")
+```
+
+## Verification Steps
+1. Connect to Atlas cluster
+2. Verify all 4 collections exist
+3. Check document counts match backup:
+   - chats: 2 documents
+   - models: 25 documents
+   - prompts: 4 documents
+   - users: 2 documents
+4. Test application connectivity
+5. Verify all features work with Atlas
+
+## Notes
+- Keep local backup as fallback
+- Atlas free tier has 512MB limit
+- Current database size should be well under limit
+- Consider setting up automated backups in Atlas
+
+## Troubleshooting
+- If restore fails, check Atlas IP whitelist
+- Ensure database user has read/write permissions
+- Verify connection string format is correct
+- Check Atlas cluster is running (not paused)
