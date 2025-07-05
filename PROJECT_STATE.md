@@ -2,9 +2,9 @@
 
 ## Current Development Status
 - **Date**: 2025-07-05
-- **Session**: Command delimiter implementation and workflow refinement
-- **Branch**: `master` (stable, updated with slash command delimiters)
-- **Status**: ✅ Implemented `/BREAKPOINT` and `/SYNC_CHAT` command delimiters, updated CLAUDE.md workflows
+- **Session**: UI bug fixes and global development workflow improvements
+- **Branch**: `master` (stable, with UI fixes and global Claude Code rules)
+- **Status**: ✅ Fixed persistent blue info bar bug, established global development rules, confirmed dual search system
 
 ## 🚀 Recent Major Achievements
 
@@ -27,10 +27,10 @@
 ## 🎯 Current Focus Areas
 
 ### Completed This Session
-- **Command Delimiters**: Implemented `/BREAKPOINT` and `/SYNC_CHAT` to avoid accidental triggers
-- **CLAUDE.md Updates**: Added file reading to sync workflow (CLAUDE.md, PROJECT_STATE.md, README.md)
-- **User Memory Feature**: Discovered and tested `#` shortcut for adding to CLAUDE.md
-- **Workflow Refinement**: Improved command structure to prevent bash conflicts
+- **UI Bug Fix**: Fixed persistent blue info bar showing TPS/time metrics that wouldn't clear on chat selection
+- **Global Development Rules**: Created `~/.claude/CLAUDE.md` with permission-based workflow rules
+- **CLAUDE.md Hierarchy**: Clarified project-specific vs user-global rule file structure
+- **Search System Confirmation**: Verified sophisticated dual search system (Brave + Serper) with AI quality assessment still active
 
 ### In Progress
 - **Grok Integration**: xAI provider implementation on `add-grok-provider` branch

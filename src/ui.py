@@ -547,6 +547,10 @@ def manage_UI(db):
         logger.debug(f"Selected chat name: {st.session_state.chat_selector_name}")
         logger.debug(f"Current active_chat before change: {st.session_state.active_chat.get('name', 'None') if st.session_state.active_chat else 'None'}")
         
+        # Clear metrics when switching chats
+        if hasattr(st.session_state, 'last_response_metrics'):
+            delattr(st.session_state, 'last_response_metrics')
+        
         st.session_state.app_mode = "chat"
         selected_chat_name = st.session_state.chat_selector_name
         for chat in chat_docs_for_options:
