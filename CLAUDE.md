@@ -23,6 +23,45 @@
 - **Test**: `python3 -m pytest tests/`
 - **Install deps**: `pip3 install -r requirements.txt`
 
+## Development Workflow Commands
+
+### WHEN USER SAYS "/BREAKPOINT" - DO THIS:
+1. **Create MongoDB Backup**
+   ```bash
+   mongodump --db ai_chat_mp --out temp_backup
+   rm -rf mongo_backups/mongo_sync
+   mv temp_backup/ai_chat_mp mongo_backups/mongo_sync
+   rm -rf temp_backup
+   ```
+
+2. **Update PROJECT_STATE.md** with current development status and recent changes
+
+3. **Execute Git Workflow**
+   ```bash
+   git add .
+   git commit -m "Development checkpoint: [analyze changes and create intelligent summary]"
+   git push
+   git gc --aggressive
+   ```
+
+### WHEN USER SAYS "/SYNC_CHAT" - DO THIS:
+1. **Pull Latest Code**
+   ```bash
+   git pull origin master
+   ```
+
+2. **Restore MongoDB Backup**
+   ```bash
+   mongorestore --db ai_chat_mp --drop mongo_backups/mongo_sync/
+   ```
+
+3. **Verify Sync** - Check collections are restored and application connectivity
+
+4. **Read Context Files**
+   - Read CLAUDE.md for updated project context
+   - Read PROJECT_STATE.md for current development status
+   - Read README.md for project overview
+
 ## Current Features
 - **🧠 Intelligent Query Routing**: Confidence-based routing to tools, search, or model knowledge
 - **🌡️ Dual Weather System**: OpenWeatherMap + WeatherFlow Tempest personal weather station
@@ -40,3 +79,6 @@
 - `src/tools.py` - Tool implementations (weather, search)
 - `src/ui.py` - Streamlit interface
 - `.streamlit/secrets.toml` - API keys configuration
+
+## Development Best Practices
+- When finished performing all of the actions in a chat_sync or a breakpoint provide the user with positive feedback the the tasks were accomplished correctly.
