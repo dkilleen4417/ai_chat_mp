@@ -1,6 +1,6 @@
 # AI Chat MP v2.0
 
-Advanced AI chat application with intelligent query routing, dual weather systems, and multiple AI provider support.
+Advanced AI chat application with intelligent LLM-powered query routing, context-aware prompt enhancement, dual weather systems, and comprehensive multi-provider AI support.
 
 ## 🌟 Key Features
 
@@ -9,25 +9,30 @@ Advanced AI chat application with intelligent query routing, dual weather system
 - **WeatherFlow Tempest**: Personal weather station integration for hyper-local data
 - **Smart routing**: Automatically detects home vs global weather queries
 
-### 🧠 **Intelligent Query Routing**
-- **Confidence-based routing**: Tools, search, or model knowledge based on query analysis
-- **Pattern matching**: Advanced keyword and context recognition
-- **Multi-faceted decisions**: Considers tool confidence, search necessity, and model capabilities
+### 🧠 **LLM-Powered Intelligent Routing**
+- **Dual-layer routing**: LLM-based intelligent decisions with rule-based fallbacks
+- **Context awareness**: Analyzes query intent, complexity, and optimal response strategy
+- **Route types**: Direct tool usage, tool+search, search-only, model knowledge, or combined approaches
+- **Real-time optimization**: Dynamic routing decisions based on query characteristics
 
 ### 📊 **Response Metrics**
 - **Real-time performance**: Response timing, tokens per second, input/output token counts
 - **Estimation transparency**: Clear indicators when data is estimated vs actual
 - **Clean display**: Ephemeral metrics that don't clutter conversation history
 
-### 🤖 **Multiple AI Providers**
-- **Google Gemini**: Fast, reliable, with vision and tool support
-- **Anthropic Claude**: Premium reasoning capabilities
-- **Ollama**: Local models with optimized caching (keep-alive support)
+### 🤖 **Comprehensive Multi-Provider Support**
+- **Google Gemini**: 2.0/2.5 Flash, Pro models with vision and tool support
+- **Anthropic Claude**: 3.5 Haiku, Sonnet, Sonnet 4 with premium reasoning
+- **OpenAI**: GPT-4o, GPT-4.1 variants with function calling
+- **xAI Grok**: Grok 2, Grok 2 Mini with real-time information access
+- **Ollama**: Local models (Llama 3.3, Mistral, etc.) with optimized caching
 
-### 🛠️ **Advanced Tools**
-- **Web Search**: Brave + Serper with intelligent fallback
-- **Weather Tools**: Global forecasts + personal weather station
-- **Query Enhancement**: Automatic query optimization for better tool matching
+### 🛠️ **Advanced Tools & Context Enhancement**
+- **Web Search**: Brave (privacy-focused) + Serper (Google results) with intelligent fallback
+- **Weather Tools**: Global forecasts + WeatherFlow personal weather station integration
+- **Query Enhancement**: LLM-powered query optimization with context injection
+- **Prompt Architecture**: Context-aware system prompts with user personalization
+- **User Profiles**: Location, timezone, preferences, and personal weather station data
 
 ## 🚀 Quick Start
 
@@ -74,19 +79,22 @@ streamlit run src/main.py
 
 ### Core Components
 - **`main.py`**: Application entry point and session management
-- **`providers.py`**: AI provider abstractions (Google, Anthropic, Ollama)
-- **`intelligent_router.py`**: Confidence-based query routing system
+- **`providers.py`**: Multi-provider AI abstractions (Google, Anthropic, OpenAI, xAI, Ollama)
+- **`llm_intelligent_router.py`**: LLM-powered query routing with rule-based fallbacks
+- **`prompt_enhancer.py`**: Context-aware prompt enhancement system
+- **`user_profile.py`**: User personalization and context management
 - **`tools.py`**: Tool registry and implementations
 - **`ui.py`**: Streamlit interface components
 - **`utils.py`**: Response metrics and token estimation
 
 ### Query Flow
 ```
-User Query → Intelligent Router → Route Decision
-├─ High Tool Confidence → Direct Tool Usage
-├─ Medium Confidence → Tool + Search Verification  
-├─ Search Needed → Web Search First
-└─ General Knowledge → Model Response
+User Query → Context Enhancement → LLM Router → Route Decision
+├─ tool_direct → Direct Tool Usage
+├─ tool_with_search → Tool + Search Verification
+├─ search_only → Web Search First
+├─ model_knowledge → AI Model Response
+└─ combined → Multi-approach Response
 ```
 
 ## 🌡️ Weather Features
@@ -147,12 +155,15 @@ The intelligent router can be tested with various query types:
 
 ## 📝 Recent Updates (v2.0)
 
-- ✅ Implemented intelligent confidence-based routing
-- ✅ Added WeatherFlow Tempest personal weather station support
-- ✅ Enhanced response metrics with real-time performance data
-- ✅ Optimized Ollama integration with model caching
-- ✅ Fixed token counting to show current message metrics
-- ✅ Production-ready codebase organization
+### 🚀 **Major Architecture Overhaul**
+- ✅ **LLM-Powered Routing**: Replaced rule-based routing with intelligent LLM decisions
+- ✅ **Context-Aware Prompts**: Comprehensive prompt enhancement with user personalization
+- ✅ **Multi-Provider Expansion**: Added OpenAI and xAI Grok support
+- ✅ **Advanced User Profiles**: Location, timezone, and personal weather station integration
+- ✅ **Enhanced Debug System**: Real-time routing decisions and performance metrics
+- ✅ **Query Optimization**: LLM-powered query enhancement for better tool matching
+- ✅ **Search Intelligence**: Quality assessment and provider selection optimization
+- ✅ **System Prompt V2**: Comprehensive 2000+ character system prompt with versioning
 
 ## 🤝 Contributing
 
