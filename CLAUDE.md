@@ -63,6 +63,51 @@
    - Read PROJECT_STATE.md for current development status
    - Read README.md for project overview
 
+### WHEN USER SAYS "/BRANCH [branch-name]" - DO THIS:
+1. **Validate Branch Name**
+   - If no branch name provided, prompt user for branch name
+   - Verify branch name follows valid git naming conventions
+   - Check that branch doesn't already exist
+
+2. **Create and Switch to New Branch**
+   ```bash
+   git checkout -b [branch-name]
+   git push -u origin [branch-name]
+   ```
+
+3. **Update PROJECT_STATE.md** with new branch status and development focus
+
+4. **Confirmation** - Confirm branch creation and readiness for feature development
+
+### WHEN USER SAYS "/PROMOTE [branch-name]" - DO THIS:
+1. **Validate and Show Context**
+   - If no branch name provided, use current branch as default
+   - Show current branch and target branch for confirmation
+   - Verify source branch exists: `git branch --list [branch-name]`
+   - Show recent commits on branch for review
+
+2. **Switch to Master and Update**
+   ```bash
+   git checkout master
+   git pull origin master
+   ```
+
+3. **Merge Feature Branch**
+   ```bash
+   git merge [branch-name]
+   git push origin master
+   ```
+
+4. **Clean Up Branch**
+   ```bash
+   git branch -d [branch-name]
+   git push origin --delete [branch-name]
+   ```
+
+5. **Update PROJECT_STATE.md** - Document successful feature promotion
+
+6. **Create MongoDB Backup** of new stable state
+
 ## Current Features
 - **🧠 Intelligent Query Routing**: Confidence-based routing to tools, search, or model knowledge
 - **🌡️ Dual Weather System**: OpenWeatherMap + WeatherFlow Tempest personal weather station
