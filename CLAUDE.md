@@ -9,8 +9,8 @@
 ## Project Context
 - **Project**: AI Chat MP - Advanced AI chat application with intelligent query routing
 - **Main Branch**: `master` (stable version with debug panel)
-- **Current Branch**: `add-grok-provider` (recently committed and pushed)
-- **Features**: Intelligent routing, dual weather systems, debug panel for internal conversations, Grok provider support
+- **Current Branch**: `master` (clean, audio features reverted)
+- **Features**: Intelligent routing, dual weather systems, debug panel for internal conversations, multi-provider support
 
 ## Development Guidelines
 - Always use `python3` for Python execution on this Mac Studio

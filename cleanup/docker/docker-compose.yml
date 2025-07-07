@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  ai-chat-mp:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      # MongoDB connection to host
+      - MONGO_LOCAL_URI=mongodb://host.docker.internal:27017/
+      - MONGO_LOCAL_DB_NAME=ai_chat_mp
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - mongo-check
+    networks:
+      - ai-chat-network
+
+  # Health check service to ensure host MongoDB is accessible
+  mongo-check:
+    image: mongo:7
+    command: >
+      bash -c "
+        echo 'Checking MongoDB connection...';
+        mongosh --host host.docker.internal:27017 --eval 'db.runCommand({ping: 1})' --quiet || exit 1;
+        echo 'MongoDB connection verified!';
+      "
+    networks:
+      - ai-chat-network
+    restart: "no"
+
+networks:
+  ai-chat-network:
+    driver: bridge
+
+volumes:
+  # Optional: if you want to persist any app data
+  app-data:
+    driver: local

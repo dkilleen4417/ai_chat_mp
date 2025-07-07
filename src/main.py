@@ -22,6 +22,7 @@ from ui import (
     render_models,
     manage_UI,
 )
+from settings import render_settings
 
 st.set_page_config(
     page_title="AI Chat - Google Gemini",
@@ -214,6 +215,7 @@ def main():
             "models": lambda: ui.render_models(ss.db),
             "debug": lambda: ui.render_debug_panel(),
             "profile": lambda: ui.render_profile(),
+            "settings": lambda: render_settings(),
         }
 
         # Render the main UI components

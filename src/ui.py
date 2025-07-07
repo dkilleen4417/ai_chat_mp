@@ -241,8 +241,7 @@ def render_archive(db):
     st.divider()
     
     all_chats = list(db.chats.find({
-        "name": {"$nin": ["Scratch Pad", st.session_state.active_chat.get('name', '')]},
-        "model": {"$regex": "gemini", "$options": "i"}
+        "name": {"$nin": ["Scratch Pad", st.session_state.active_chat.get('name', '')]}
     }).sort("updated_at", -1))
     
     if not all_chats:
@@ -257,7 +256,7 @@ def render_archive(db):
         with col2:
             st.markdown(f"**Archived:** :blue[{archived_status}]")
         with col3:
-            toggle = st.checkbox("Archived", value=archived_status, key=f"toggle_{chat['name']}", help="Check to archive this chat")
+            toggle = st.checkbox("Archive", value=archived_status, key=f"toggle_{chat['name']}", help="Check to archive this chat")
             if toggle != archived_status:
                 db.chats.update_one({"_id": chat["_id"]}, {"$set": {"archived": toggle}})
                 st.rerun()
@@ -523,15 +522,18 @@ def manage_UI(db):
     # First row - 4 buttons
     colA, colB, colC, colD = st.sidebar.columns(4)
     if colA.button("🆕", help="New chat", use_container_width=True): st.session_state.app_mode = "new_chat"
-    if colB.button("⚙️", help="Manage models", use_container_width=True): st.session_state.app_mode = "models"
+    if colB.button("🤖", help="Manage models", use_container_width=True): st.session_state.app_mode = "models"
     if colC.button("📂", help="Manage chat archiving", use_container_width=True): st.session_state.app_mode = "archive"
     if colD.button("🐞", help="Debug panel - View internal agent conversations", use_container_width=True): st.session_state.app_mode = "debug"
     
-    # Second row - User profile button (centered)
-    col_spacer1, col_profile, col_spacer2 = st.sidebar.columns([1, 2, 1])
+    # Second row - Profile and Settings buttons
+    col_profile, col_settings = st.sidebar.columns(2)
     with col_profile:
-        if st.button("👤 Profile", help="Manage user profile and personalization", use_container_width=True): 
+        if st.button("👤", help="Manage user profile and personalization", use_container_width=True): 
             st.session_state.app_mode = "profile"
+    with col_settings:
+        if st.button("⚙️", help="Configure app behavior and preferences", use_container_width=True):
+            st.session_state.app_mode = "settings"
 
     chat_docs_for_options = make_chat_list(db)
     st.sidebar.markdown("### Select Chat")

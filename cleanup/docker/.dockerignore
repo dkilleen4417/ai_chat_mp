@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# MongoDB backups (too large for Docker context)
+mongo_backups/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# Environment files (will be mounted separately)
+.env
+.env.local
+.env.development
+.env.production
+
+# Streamlit cache
+.streamlit/
+
+# Temporary files
+temp/
+tmp/
+*.tmp
