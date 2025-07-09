@@ -11,7 +11,10 @@ DEFAULT_MODEL = "gemini-2.5-flash-lite-preview-06-17"
 # The endpoint for Google's Generative AI services.
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com"
 
-# --- Ollama Configuration ---
+# --- API Endpoints ---
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+XAI_API_URL = "https://api.x.ai/v1/chat/completions"
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_KEEP_ALIVE = "10m"  # Keep models in memory to avoid reloading
 

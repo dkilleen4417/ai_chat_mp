@@ -4,54 +4,22 @@ import google.generativeai as genai
 import requests
 import time
 import json
-from abc import ABC, abstractmethod
+# Removed unnecessary ABC import
 from typing import List, Dict, Any, Optional
 import streamlit as st
 from tools import tool_registry
-
-# Session state alias for consistency
-ss = st.session_state
 from logger import logger
-from config import OLLAMA_BASE_URL, OLLAMA_KEEP_ALIVE
+from config import OLLAMA_BASE_URL, OLLAMA_KEEP_ALIVE, ANTHROPIC_API_URL, OPENAI_API_URL, XAI_API_URL
 from utils import ResponseTimer, estimate_tokens, create_response_object
+ss = st.session_state
 
-
-class BaseProvider(ABC):
-    """Base class for all AI providers"""
+class GoogleProvider:
+    """Provider for Google AI (Gemini) models"""
     
     def __init__(self, api_key: str):
         self.api_key = api_key
         self._client = None
         self.initialize_client()
-    
-    @abstractmethod
-    def initialize_client(self):
-        """Initialize the provider's client"""
-        pass
-    
-    @abstractmethod
-    def generate_response(self, messages: List[Dict], model_config: Dict, search_results: Optional[str] = None) -> Dict[str, Any]:
-        """Generate a chat response with metrics"""
-        pass
-    
-    @abstractmethod
-    def get_available_models(self) -> List[Dict]:
-        """Get list of available models for this provider"""
-        pass
-    
-    @abstractmethod
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate model configuration"""
-        pass
-    
-    @property
-    def provider_name(self) -> str:
-        """Return the provider name"""
-        return self.__class__.__name__.replace("Provider", "").lower()
-
-
-class GoogleProvider(BaseProvider):
-    """Provider for Google AI (Gemini) models"""
     
     def initialize_client(self):
         """Initialize Google AI client"""
@@ -245,37 +213,16 @@ class GoogleProvider(BaseProvider):
                 }
                 return create_response_object(error_text, metrics)
     
-    def get_available_models(self) -> List[Dict]:
-        """Get available Google AI models"""
-        return [
-            {
-                "name": "gemini-2.0-flash-exp",
-                "provider": "google",
-                "display_name": "Gemini 2.0 Flash (Experimental)",
-                "capabilities": ["text", "vision", "tools"]
-            },
-            {
-                "name": "gemini-1.5-pro",
-                "provider": "google", 
-                "display_name": "Gemini 1.5 Pro",
-                "capabilities": ["text", "vision", "tools"]
-            },
-            {
-                "name": "gemini-1.5-flash",
-                "provider": "google",
-                "display_name": "Gemini 1.5 Flash", 
-                "capabilities": ["text", "vision", "tools"]
-            }
-        ]
     
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate Google AI model configuration"""
-        required_fields = ["name", "provider", "temperature", "top_p"]
-        return all(field in config for field in required_fields)
 
 
-class AnthropicProvider(BaseProvider):
+class AnthropicProvider:
     """Provider for Anthropic (Claude) models using direct HTTP requests"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._client = None
+        self.initialize_client()
     
     def initialize_client(self):
         """Initialize HTTP client"""
@@ -293,7 +240,7 @@ class AnthropicProvider(BaseProvider):
                 input_tokens = estimate_tokens(input_text)
                 
                 # API endpoint
-                url = "https://api.anthropic.com/v1/messages"
+                url = ss.api_endpoints['anthropic']
                 
                 # Headers
                 headers = {
@@ -372,41 +319,17 @@ class AnthropicProvider(BaseProvider):
                 }
                 return create_response_object(error_text, metrics)
     
-    def get_available_models(self) -> List[Dict]:
-        """Get available Anthropic models"""
-        return [
-            {
-                "name": "claude-3-5-sonnet-20241022",
-                "provider": "anthropic",
-                "display_name": "Claude 3.5 Sonnet",
-                "capabilities": ["text", "vision"]
-            },
-            {
-                "name": "claude-3-5-haiku-20241022", 
-                "provider": "anthropic",
-                "display_name": "Claude 3.5 Haiku",
-                "capabilities": ["text", "vision"]
-            },
-            {
-                "name": "claude-3-opus-20240229",
-                "provider": "anthropic",
-                "display_name": "Claude 3 Opus",
-                "capabilities": ["text", "vision"]
-            }
-        ]
     
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate Anthropic model configuration"""
-        required_fields = ["name", "provider", "temperature"]
-        return all(field in config for field in required_fields)
 
 
-class OllamaProvider(BaseProvider):
+class OllamaProvider:
     """Provider for Ollama (Local) models using HTTP API"""
     
     def __init__(self, api_key: str = ""):
         # Ollama doesn't require an API key
-        super().__init__(api_key)
+        self.api_key = api_key
+        self._client = None
+        self.initialize_client()
     
     def initialize_client(self):
         """Initialize HTTP client for Ollama"""
@@ -415,7 +338,7 @@ class OllamaProvider(BaseProvider):
     def preload_model(self, model_name: str):
         """Preload a model to keep it in memory"""
         try:
-            url = f"{OLLAMA_BASE_URL}/api/generate"
+            url = f"{ss.api_endpoints['ollama']}/api/generate"
             payload = {
                 "model": model_name,
                 "prompt": "",
@@ -441,7 +364,7 @@ class OllamaProvider(BaseProvider):
                     input_text += search_results
                 input_tokens = estimate_tokens(input_text)
                 
-                url = f"{OLLAMA_BASE_URL}/api/chat"
+                url = f"{ss.api_endpoints['ollama']}/api/chat"
                 
                 # Process messages for Ollama format
                 ollama_messages = []
@@ -542,39 +465,16 @@ class OllamaProvider(BaseProvider):
                 }
                 return create_response_object(error_text, metrics)
     
-    def get_available_models(self) -> List[Dict]:
-        """Get available Ollama models from the API"""
-        try:
-            url = f"{OLLAMA_BASE_URL}/api/tags"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            
-            models = []
-            for model in data.get("models", []):
-                models.append({
-                    "name": model["name"],
-                    "provider": "ollama",
-                    "display_name": f"Ollama {model['name']}",
-                    "capabilities": ["text"],
-                    "size": model.get("size", 0),
-                    "parameter_size": model.get("details", {}).get("parameter_size", "Unknown")
-                })
-            
-            return models
-            
-        except Exception as e:
-            logger.warning(f"Could not fetch Ollama models: {e}")
-            return []
     
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate Ollama model configuration"""
-        required_fields = ["name", "provider"]
-        return all(field in config for field in required_fields)
 
 
-class GrokProvider(BaseProvider):
+class GrokProvider:
     """Provider for xAI Grok models using OpenAI-compatible API"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._client = None
+        self.initialize_client()
     
     def initialize_client(self):
         """Initialize HTTP client for xAI API"""
@@ -592,7 +492,7 @@ class GrokProvider(BaseProvider):
                 input_tokens = estimate_tokens(input_text)
                 
                 # xAI API endpoint (OpenAI-compatible)
-                url = "https://api.x.ai/v1/chat/completions"
+                url = ss.api_endpoints['xai']
                 
                 # Headers
                 headers = {
@@ -686,43 +586,16 @@ class GrokProvider(BaseProvider):
                 logger.error(f"Unexpected error with xAI: {e}")
                 return create_response_object(f"Error: {str(e)}", None)
     
-    def get_available_models(self) -> List[Dict]:
-        """Get available Grok models"""
-        # Based on xAI documentation - Grok 3 and Grok 3 mini
-        return [
-            {
-                "name": "grok-3",
-                "provider": "grok",
-                "description": "xAI's flagship model that excels at complex reasoning, coding, and analysis tasks",
-                "context_length": 128000,
-                "max_output_tokens": 4096,
-                "supports_vision": True,
-                "supports_tools": False  # Will add when xAI adds function calling
-            },
-            {
-                "name": "grok-3-mini",
-                "provider": "grok",
-                "description": "Lightweight Grok model optimized for speed and efficiency",
-                "context_length": 128000,
-                "max_output_tokens": 4096,
-                "supports_vision": False,
-                "supports_tools": False
-            }
-        ]
     
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate Grok model configuration"""
-        required_fields = ["name", "provider"]
-        valid_models = ["grok-3", "grok-3-mini"]
-        return (
-            all(field in config for field in required_fields) and
-            config.get("name") in valid_models and
-            config.get("provider") == "grok"
-        )
 
 
-class OpenAIProvider(BaseProvider):
+class OpenAIProvider:
     """Provider for OpenAI GPT models"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._client = None
+        self.initialize_client()
     
     def initialize_client(self):
         """Initialize HTTP client for OpenAI API"""
@@ -740,7 +613,7 @@ class OpenAIProvider(BaseProvider):
                 input_tokens = estimate_tokens(input_text)
                 
                 # OpenAI API endpoint
-                url = "https://api.openai.com/v1/chat/completions"
+                url = ss.api_endpoints['openai']
                 
                 # Headers
                 headers = {
@@ -834,65 +707,7 @@ class OpenAIProvider(BaseProvider):
                 logger.error(f"Unexpected error with OpenAI: {e}")
                 return create_response_object(f"Error: {str(e)}", None)
     
-    def get_available_models(self) -> List[Dict]:
-        """Get available OpenAI models"""
-        return [
-            {
-                "name": "gpt-4o",
-                "provider": "openai",
-                "description": "Most capable OpenAI model with vision and function calling",
-                "context_length": 128000,
-                "max_output_tokens": 16384,
-                "supports_vision": True,
-                "supports_tools": True
-            },
-            {
-                "name": "gpt-4o-mini",
-                "provider": "openai",
-                "description": "Lightweight GPT-4o model optimized for speed and cost",
-                "context_length": 128000,
-                "max_output_tokens": 16384,
-                "supports_vision": True,
-                "supports_tools": True
-            },
-            {
-                "name": "gpt-4.1",
-                "provider": "openai",
-                "description": "Latest GPT-4.1 model with enhanced capabilities",
-                "context_length": 1000000,
-                "max_output_tokens": 16384,
-                "supports_vision": True,
-                "supports_tools": True
-            },
-            {
-                "name": "gpt-4.1-mini",
-                "provider": "openai",
-                "description": "Efficient GPT-4.1 model with large context",
-                "context_length": 1000000,
-                "max_output_tokens": 16384,
-                "supports_vision": True,
-                "supports_tools": True
-            },
-            {
-                "name": "gpt-4.1-nano",
-                "provider": "openai",
-                "description": "Ultra-efficient GPT-4.1 model for simple tasks",
-                "context_length": 128000,
-                "max_output_tokens": 8192,
-                "supports_vision": False,
-                "supports_tools": True
-            }
-        ]
     
-    def validate_model_config(self, config: Dict) -> bool:
-        """Validate OpenAI model configuration"""
-        required_fields = ["name", "provider"]
-        valid_models = ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"]
-        return (
-            all(field in config for field in required_fields) and
-            config.get("name") in valid_models and
-            config.get("provider") == "openai"
-        )
 
 
 class ProviderManager:
@@ -935,7 +750,7 @@ class ProviderManager:
         except Exception as e:
             logger.warning(f"Ollama not available: {e}")
     
-    def get_provider(self, provider_name: str) -> BaseProvider:
+    def get_provider(self, provider_name: str):
         """Get a specific provider"""
         if provider_name not in self.providers:
             raise ValueError(f"Provider {provider_name} not available")
@@ -951,10 +766,18 @@ def initialize_provider_manager():
     """Initialize the provider manager in session state"""
     if 'provider_manager' not in ss:
         ss.provider_manager = ProviderManager()
+    
+    # Cache API endpoints in session state for performance
+    if 'api_endpoints' not in ss:
+        ss.api_endpoints = {
+            'anthropic': ANTHROPIC_API_URL,
+            'openai': OPENAI_API_URL,
+            'xai': XAI_API_URL,
+            'ollama': OLLAMA_BASE_URL
+        }
 
 def generate_chat_response_with_providers(search_results: Optional[str] = None):
     """Updated generate_chat_response function using providers with metrics"""
-    from utils import format_response_metrics
     
     messages = ss.active_chat.get("messages", [])
     model_config = ss.db.models.find_one({"name": ss.active_chat['model']})

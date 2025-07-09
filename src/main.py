@@ -141,9 +141,7 @@ def initialize():
     ss.brave_api_key = st.secrets.get("BRAVE_API_KEY")       
     ss.db = get_database()
     ss.chats = list(ss.db.chats.find({"archived": False}))
-
     ss.active_chat = ss.db.chats.find_one({"name": "Scratch Pad"})
-    
     ss.llm_avatar = config.LLM_AVATAR
     ss.user_avatar = config.USER_AVATAR
     ss.models = list(ss.db.models.find())
