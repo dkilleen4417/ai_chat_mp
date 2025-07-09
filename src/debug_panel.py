@@ -4,6 +4,10 @@ Debug Panel - Shows internal agent conversations and routing decisions
 
 import streamlit as st
 from typing import List
+from llm_intelligent_router import usage_tracker
+
+# Session state alias for consistency
+ss = st.session_state
 
 def render_debug_panel():
     """Render the debug panel showing internal agent conversations"""
@@ -26,11 +30,52 @@ def render_debug_panel():
     
     st.divider()
     
-    # Debug logs container
-    if 'debug_logs' not in st.session_state:
-        st.session_state.debug_logs = []
+    # Routing Usage Statistics
+    st.subheader("📊 Routing Usage Statistics")
     
-    if not st.session_state.debug_logs:
+    try:
+        stats = usage_tracker.get_usage_stats()
+        
+        if stats['total_requests'] > 0:
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Requests", stats['total_requests'])
+            
+            with col2:
+                st.metric("LLM Success", stats['llm_success_count'], 
+                         f"{stats['llm_success_rate']:.1%}")
+            
+            with col3:
+                st.metric("Backup Used", stats['backup_usage_count'], 
+                         f"{stats['backup_usage_rate']:.1%}")
+            
+            with col4:
+                if stats['last_backup_time']:
+                    from datetime import datetime
+                    last_backup = datetime.fromisoformat(stats['last_backup_time'])
+                    st.metric("Last Backup", last_backup.strftime("%H:%M:%S"))
+                else:
+                    st.metric("Last Backup", "Never")
+            
+            # Show recent backup reasons if any
+            if stats['recent_backup_reasons']:
+                st.write("**Recent Backup Reasons:**")
+                for reason in stats['recent_backup_reasons']:
+                    st.write(f"• {reason}")
+        else:
+            st.info("No routing decisions recorded yet.")
+            
+    except Exception as e:
+        st.error(f"Error loading usage statistics: {e}")
+    
+    st.divider()
+    
+    # Debug logs container
+    if 'debug_logs' not in ss:
+        ss.debug_logs = []
+    
+    if not ss.debug_logs:
         st.info("🤖 No debug logs yet. Send a message to see the internal agent conversation!")
         st.markdown("""
         **What you'll see here:**
@@ -38,13 +83,14 @@ def render_debug_panel():
         - 🔧 Tool selection reasoning  
         - 🔍 Search vs direct tool usage
         - 📊 Confidence thresholds and fallbacks
+        - 🔍 Context relevance analysis
         - ⚠️ Errors and exception handling
         """)
     else:
         # Show logs in a container
         with st.container(height=600, border=True):
             # Display logs (newest first if auto-scroll is off, oldest first if on)
-            logs_to_show = st.session_state.debug_logs
+            logs_to_show = ss.debug_logs
             if not auto_scroll:
                 logs_to_show = reversed(logs_to_show)
             
@@ -78,17 +124,17 @@ def render_debug_panel():
         if st.button("🔄 Refresh Logs"):
             st.rerun()
         
-        st.caption(f"📈 Total logs: {len(st.session_state.debug_logs)} (last 100 kept)")
+        st.caption(f"📈 Total logs: {len(ss.debug_logs)} (last 100 kept)")
 
 def add_debug_sidebar_controls():
     """Add minimal debug controls to sidebar"""
     
     # Just the live debug toggle - clean and simple
     debug_mode = st.sidebar.checkbox("🐛 Live Debug", help="Show debug info in chat messages", 
-                                     value=st.session_state.get('live_debug_mode', False))
+                                     value=ss.get('live_debug_mode', False))
     
     # Store the debug mode in session state
-    if debug_mode != st.session_state.get('live_debug_mode', False):
-        st.session_state.live_debug_mode = debug_mode
+    if debug_mode != ss.get('live_debug_mode', False):
+        ss.live_debug_mode = debug_mode
     
     return debug_mode

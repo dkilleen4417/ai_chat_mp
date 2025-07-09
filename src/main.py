@@ -96,6 +96,11 @@ def apply_intelligent_routing(prompt: str) -> tuple[bool, str, str]:
         logger.debug(f"Primary tool: {decision.primary_tool}, Confidence: {decision.confidence:.2f}")
         logger.debug(f"Reasoning: {decision.reasoning}")
         
+        # Periodically log usage statistics (every 10 requests)
+        from llm_intelligent_router import usage_tracker
+        if usage_tracker.total_requests % 10 == 0 and usage_tracker.total_requests > 0:
+            usage_tracker.log_stats_summary()
+        
         # Check model capabilities for tool routing
         model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
         model_capabilities = model_config.get("capabilities", []) if model_config else []
@@ -201,25 +206,24 @@ def main():
         # Define page renderers
         page_renderer = {
             "chat": lambda: ui.render_chat(
-                ss.db,
-                ss.provider_manager,
                 SearchManager(),
                 apply_intelligent_routing,
                 optimize_search_query,
                 generate_chat_response_with_providers,
             ),
-            "new_chat": lambda: ui.render_new(ss.db, ss.provider_manager),
-            "clear_chat": lambda: ui.render_clear(ss.db),
-            "delete_chat": lambda: ui.render_delete(ss.db),
-            "archive": lambda: ui.render_archive(ss.db),
-            "models": lambda: ui.render_models(ss.db),
-            "debug": lambda: ui.render_debug_panel(),
-            "profile": lambda: ui.render_profile(),
-            "settings": lambda: render_settings(),
+            "new_chat": ui.render_new,
+            "clear_chat": ui.render_clear,
+            "delete_chat": ui.render_delete,
+            "archive": ui.render_archive,
+            "models": ui.render_models,
+            "debug": ui.render_debug_panel,
+            "profile": ui.render_profile,
+            "settings": render_settings,
+            "publish": ui.render_publish,
         }
 
         # Render the main UI components
-        ui.manage_UI(ss.db)
+        ui.manage_UI()
         
         # Render the current page
         current_page = ss.get('app_mode', 'chat')

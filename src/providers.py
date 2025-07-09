@@ -8,6 +8,9 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 import streamlit as st
 from tools import tool_registry
+
+# Session state alias for consistency
+ss = st.session_state
 from logger import logger
 from config import OLLAMA_BASE_URL, OLLAMA_KEEP_ALIVE
 from utils import ResponseTimer, estimate_tokens, create_response_object
@@ -83,6 +86,36 @@ class GoogleProvider(BaseProvider):
                 # Build conversation history for the API
                 api_history: List[Dict[str, Any]] = []
                 
+                # Analyze context relevance for the current question
+                from context_analyzer import context_analyzer
+                current_question = messages[-1].get("content", "") if messages else ""
+                context_analysis = context_analyzer.analyze_context_relevance(current_question, messages)
+                
+                # Debug logging for context analysis
+                from main import add_debug_log
+                add_debug_log(f"🔍 Context Analysis: {context_analysis['question_type']}")
+                add_debug_log(f"📊 Confidence: {context_analysis['confidence']:.2f}")
+                add_debug_log(f"💭 Reasoning: {context_analysis['reasoning']}")
+                add_debug_log(f"🪟 Context Window: {context_analysis['context_window']} messages")
+                
+                # Log new chat suggestion if applicable
+                if context_analysis.get("suggest_new_chat", False):
+                    add_debug_log(f"💡 New Chat Suggestion: {context_analysis['new_chat_reasoning']}")
+                    logger.info(f"New chat suggestion: {context_analysis['new_chat_reasoning']}")
+                
+                logger.info(f"Context analysis: {context_analysis}")
+                
+                # Store context analysis in session state for UI use
+                ss.last_context_analysis = context_analysis
+                
+                # Get optimal context window
+                optimal_messages = context_analyzer.get_optimal_context_window(context_analysis, messages)
+                
+                # Log context reduction
+                if len(optimal_messages) < len(messages):
+                    add_debug_log(f"📉 Context Reduced: {len(messages)} → {len(optimal_messages)} messages")
+                    logger.info(f"Context reduced from {len(messages)} to {len(optimal_messages)} messages")
+                
                 # Enhance system prompt with user context
                 from prompt_enhancer import enhance_system_prompt
                 original_system_prompt = model_config.get("system_prompt", "")
@@ -96,7 +129,8 @@ class GoogleProvider(BaseProvider):
                         ]
                     )
 
-                for msg in messages:
+                # Use optimal context window instead of full message history
+                for msg in optimal_messages:
                     role = "model" if msg["role"] == "assistant" else "user"
                     api_history.append({"role": role, "parts": [msg["content"]]})
 
@@ -133,6 +167,11 @@ class GoogleProvider(BaseProvider):
                         # Normal answer - extract usage data if available
                         final_text = candidate.content.parts[0].text if hasattr(candidate.content.parts[0], "text") else response.text
                         
+                        # Debug logging for final response
+                        from main import add_debug_log
+                        add_debug_log(f"✅ Final Response: {final_text[:200]}...")
+                        logger.info(f"Final model response: {final_text}")
+                        
                         # Use our estimates for simple performance indication
                         actual_input_tokens = input_tokens
                         actual_output_tokens = estimate_tokens(final_text)
@@ -162,6 +201,15 @@ class GoogleProvider(BaseProvider):
 
                     # Run the tool and append result
                     tool_output = tool_fn(**args)
+                    
+                    # Debug logging for tool execution
+                    from main import add_debug_log
+                    add_debug_log(f"🔧 Tool Executed: {tool_name}")
+                    add_debug_log(f"📝 Tool Args: {args}")
+                    add_debug_log(f"📊 Tool Output: {tool_output[:200]}...")
+                    logger.info(f"Tool {tool_name} executed successfully with args: {args}")
+                    logger.info(f"Tool output: {tool_output}")
+                    
                     # Format function response according to Gemini's expected schema
                     api_history.append(
                         {
@@ -901,15 +949,15 @@ class ProviderManager:
 
 def initialize_provider_manager():
     """Initialize the provider manager in session state"""
-    if 'provider_manager' not in st.session_state:
-        st.session_state.provider_manager = ProviderManager()
+    if 'provider_manager' not in ss:
+        ss.provider_manager = ProviderManager()
 
 def generate_chat_response_with_providers(search_results: Optional[str] = None):
     """Updated generate_chat_response function using providers with metrics"""
     from utils import format_response_metrics
     
-    messages = st.session_state.active_chat.get("messages", [])
-    model_config = st.session_state.db.models.find_one({"name": st.session_state.active_chat['model']})
+    messages = ss.active_chat.get("messages", [])
+    model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
     
     if not messages:
         # Return simple response for empty chat
@@ -927,7 +975,7 @@ def generate_chat_response_with_providers(search_results: Optional[str] = None):
     
     try:
         provider_name = model_config.get("provider", "google")
-        response_obj = st.session_state.provider_manager.generate_response(
+        response_obj = ss.provider_manager.generate_response(
             provider_name=provider_name,
             messages=messages,
             model_config=model_config,
@@ -936,7 +984,7 @@ def generate_chat_response_with_providers(search_results: Optional[str] = None):
         
         # Store metrics in session state for UI display
         if response_obj.get("metrics"):
-            st.session_state.last_response_metrics = response_obj["metrics"]
+            ss.last_response_metrics = response_obj["metrics"]
         
         return response_obj
         

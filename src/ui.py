@@ -6,6 +6,9 @@ from debug_utils import add_debug_log
 import debug_panel
 import config
 
+# Session state alias for consistency
+ss = st.session_state
+
 def show_notification(message, type="success"):
     icon = "✅" if type == "success" else "❌"
     st.toast(message, icon=icon)
@@ -32,7 +35,7 @@ def format_chat_for_radio(chat_doc):
     friendly_time = get_friendly_time(seconds_ago)
     return f"{chat_doc['name']} ({friendly_time})"
 
-def render_new(db, provider_manager):
+def render_new():
     """Render the new chat creation form."""
     st.title("Create New Chat")
     
@@ -44,7 +47,7 @@ def render_new(db, provider_manager):
         ).strip()
         
         try:
-            db_models = list(db.models.find({}, {"name": 1, "provider": 1, "_id": 0}))
+            db_models = list(ss.db.models.find({}, {"name": 1, "provider": 1, "_id": 0}))
             available_models = [
                 (f"{model['name']} ({model.get('provider', 'Unknown Provider')})", model['name'])
                 for model in db_models
@@ -64,7 +67,7 @@ def render_new(db, provider_manager):
         model = model_mapping.get(selected_display) if model_mapping else None
         
         try:
-            db_prompts = list(db.prompts.find())
+            db_prompts = list(ss.db.prompts.find())
             available_prompts = [(p["name"], p["content"]) for p in db_prompts]
         except Exception as e:
             st.error(f"Error fetching prompts: {str(e)}")
@@ -85,7 +88,7 @@ def render_new(db, provider_manager):
         if submitted:
             if not new_chat_name:
                 st.error("Please enter a chat name")
-            elif db.chats.find_one({"name": new_chat_name}):
+            elif ss.db.chats.find_one({"name": new_chat_name}):
                 st.error("A chat with this name already exists")
             else:
                 current_time_val = current_time()
@@ -100,26 +103,26 @@ def render_new(db, provider_manager):
                     "updated_at": current_time_val,
                     "archived": False
                 }
-                results = db.chats.insert_one(new_chat_data)
-                new_chat_doc = db.chats.find_one({"_id": results.inserted_id})
+                results = ss.db.chats.insert_one(new_chat_data)
+                new_chat_doc = ss.db.chats.find_one({"_id": results.inserted_id})
                 if new_chat_doc:
-                    st.session_state.active_chat = new_chat_doc
+                    ss.active_chat = new_chat_doc
                     show_notification(f"Created and activated '{new_chat_doc['name']}'!", "success")
-                    st.session_state.app_mode = "chat"
+                    ss.app_mode = "chat"
                     st.rerun()
     
     cancelled = st.button("Cancel", use_container_width=True)
     if cancelled:
-        st.session_state.app_mode = "chat"
+        ss.app_mode = "chat"
         st.rerun()
 
-def render_chat(db, provider_manager, search_manager, apply_intelligent_routing, optimize_search_query, generate_chat_response_with_providers):
-    st.title(f"💬 {st.session_state.active_chat['name']}")
+def render_chat(search_manager, apply_intelligent_routing, optimize_search_query, generate_chat_response_with_providers):
+    st.title(f"💬 {ss.active_chat['name']}")
     message_container = st.container(height=600, border=True)
 
-    if "messages" in st.session_state.active_chat:
-        for msg in st.session_state.active_chat["messages"]:
-            avatar = st.session_state.llm_avatar if msg["role"] == "assistant" else st.session_state.user_avatar
+    if "messages" in ss.active_chat:
+        for msg in ss.active_chat["messages"]:
+            avatar = ss.llm_avatar if msg["role"] == "assistant" else ss.user_avatar
             with message_container.chat_message(msg["role"], avatar=avatar):
                 if "search_results" in msg:
                     with st.expander("🔍 View Search Results"):
@@ -128,12 +131,12 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
 
     if prompt := st.chat_input("Type your message here..."):
         # Clear previous response metrics before new message
-        if hasattr(st.session_state, 'last_response_metrics'):
-            delattr(st.session_state, 'last_response_metrics')
+        if hasattr(ss, 'last_response_metrics'):
+            delattr(ss, 'last_response_metrics')
         
         user_message = {"role": "user", "content": prompt, "timestamp": current_time()}
-        st.session_state.active_chat["messages"].append(user_message)
-        with message_container.chat_message("user", avatar=st.session_state.user_avatar):
+        ss.active_chat["messages"].append(user_message)
+        with message_container.chat_message("user", avatar=ss.user_avatar):
             st.markdown(prompt)
 
         needs_search, search_provider, routing_type = apply_intelligent_routing(prompt)
@@ -184,7 +187,7 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
         
         add_debug_log("=" * 60)
 
-        with message_container.chat_message("assistant", avatar=st.session_state.llm_avatar):
+        with message_container.chat_message("assistant", avatar=ss.llm_avatar):
             if search_results_text:
                 with st.expander("🔍 View Search Results"):
                     st.markdown(search_results_text)
@@ -197,51 +200,68 @@ def render_chat(db, provider_manager, search_manager, apply_intelligent_routing,
         }
         if search_results_text:
             assistant_message["search_results"] = search_results_text
-        st.session_state.active_chat["messages"].append(assistant_message)
+        ss.active_chat["messages"].append(assistant_message)
 
-        db.chats.update_one(
-            {"_id": st.session_state.active_chat["_id"]},
+        ss.db.chats.update_one(
+            {"_id": ss.active_chat["_id"]},
             {
                 "$set": {
-                    "messages": st.session_state.active_chat["messages"],
+                    "messages": ss.active_chat["messages"],
                     "updated_at": current_time()
                 }
             }
         )
         st.rerun()
 
+    # Show new chat suggestion if applicable
+    if hasattr(ss, 'last_context_analysis') and ss.last_context_analysis:
+        context_analysis = ss.last_context_analysis
+        if context_analysis.get("suggest_new_chat", False):
+            with st.container():
+                st.info(f"💡 **Suggestion:** {context_analysis['new_chat_reasoning']}. Consider starting a new chat for better focus!")
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("🆕 Start New Chat", key="new_chat_suggestion"):
+                        ss.app_mode = "new_chat"
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Dismiss", key="dismiss_suggestion"):
+                        # Clear the suggestion
+                        ss.last_context_analysis = None
+                        st.rerun()
+
     # Display response metrics outside the message container (ephemeral)
-    if hasattr(st.session_state, 'last_response_metrics') and st.session_state.last_response_metrics:
-        metrics_text = format_response_metrics(st.session_state.last_response_metrics)
+    if hasattr(ss, 'last_response_metrics') and ss.last_response_metrics:
+        metrics_text = format_response_metrics(ss.last_response_metrics)
         st.info(metrics_text)
 
-def render_clear(db):
-    db.chats.update_one(
-        {"_id": st.session_state.active_chat["_id"]},
+def render_clear():
+    ss.db.chats.update_one(
+        {"_id": ss.active_chat["_id"]},
         {"$set": {"messages": [], "updated_at": current_time()}}
     )
-    st.session_state.active_chat = db.chats.find_one({"_id": st.session_state.active_chat["_id"]})
+    ss.active_chat = ss.db.chats.find_one({"_id": ss.active_chat["_id"]})
     show_notification("Chat cleared successfully", "success")
-    st.session_state.app_mode = "chat"
+    ss.app_mode = "chat"
     st.rerun()
 
-def render_delete(db):
-    if st.session_state.active_chat['name'] == "Scratch Pad":
+def render_delete():
+    if ss.active_chat['name'] == "Scratch Pad":
         show_notification("Cannot delete the default Scratch Pad chat", "error")
     else:
-        db.chats.delete_one({"_id": st.session_state.active_chat["_id"]})
-        st.session_state.active_chat = db.chats.find_one({"name": "Scratch Pad"})
+        ss.db.chats.delete_one({"_id": ss.active_chat["_id"]})
+        ss.active_chat = ss.db.chats.find_one({"name": "Scratch Pad"})
         show_notification("Chat deleted successfully", "success")
-    st.session_state.app_mode = "chat"
+    ss.app_mode = "chat"
     st.rerun()
 
-def render_archive(db):
+def render_archive():
     st.markdown("### Archive Management 📂")
     st.markdown("Toggle archive status for your chats. Archived chats won't appear in the sidebar.")
     st.divider()
     
-    all_chats = list(db.chats.find({
-        "name": {"$nin": ["Scratch Pad", st.session_state.active_chat.get('name', '')]}
+    all_chats = list(ss.db.chats.find({
+        "name": {"$nin": ["Scratch Pad", ss.active_chat.get('name', '')]}
     }).sort("updated_at", -1))
     
     if not all_chats:
@@ -249,7 +269,7 @@ def render_archive(db):
         return
     
     for chat in all_chats:
-        col1, col2, col3 = st.columns([3, 3, 2])
+        col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
         archived_status = chat.get('archived', False)
         with col1:
             st.markdown(f"**Chat Name:** :blue[{chat['name']}]")
@@ -258,10 +278,15 @@ def render_archive(db):
         with col3:
             toggle = st.checkbox("Archive", value=archived_status, key=f"toggle_{chat['name']}", help="Check to archive this chat")
             if toggle != archived_status:
-                db.chats.update_one({"_id": chat["_id"]}, {"$set": {"archived": toggle}})
+                ss.db.chats.update_one({"_id": chat["_id"]}, {"$set": {"archived": toggle}})
+                st.rerun()
+        with col4:
+            if st.button("📝", key=f"publish_{chat['name']}", help="Publish this chat as podcast"):
+                ss.app_mode = "publish"
+                ss.selected_chat_for_publish = chat
                 st.rerun()
 
-def render_models(db):
+def render_models():
     st.markdown("### Model Management 🤖")
     
     model_action = st.radio(
@@ -325,18 +350,18 @@ def render_models(db):
                         "created_at": current_time()
                     }
                     
-                    existing_model = db.models.find_one({"name": model_name})
+                    existing_model = ss.db.models.find_one({"name": model_name})
                     if existing_model:
                         st.error(f"Model '{model_name}' already exists!")
                     else:
-                        db.models.insert_one(new_model)
+                        ss.db.models.insert_one(new_model)
                         st.success(f"Model '{model_name}' added successfully!")
                         st.balloons()
                         sleep(2)
                         st.rerun()
     
     if model_action == "Edit":
-        available_models = list(db.models.find({}, {"name": 1, "_id": 0}))
+        available_models = list(ss.db.models.find({}, {"name": 1, "_id": 0}))
         
         if not available_models:
             st.warning("No models available for editing.")
@@ -353,14 +378,14 @@ def render_models(db):
         )
         
         if st.button("Edit Selected Model"):
-            st.session_state.edit_model_name = model_name_map[selected_display]
-            st.session_state.edit_model_data = db.models.find_one({"name": st.session_state.edit_model_name})
+            ss.edit_model_name = model_name_map[selected_display]
+            ss.edit_model_data = ss.db.models.find_one({"name": ss.edit_model_name})
             st.rerun()
             return
             
-    if 'edit_model_data' in st.session_state and st.session_state.edit_model_data is not None:
-        current_model = st.session_state.edit_model_data
-        model_to_edit = st.session_state.edit_model_name
+    if 'edit_model_data' in ss and ss.edit_model_data is not None:
+        current_model = ss.edit_model_data
+        model_to_edit = ss.edit_model_name
         
         with st.form("edit_model_form"):
             st.subheader("Model Capabilities")
@@ -444,24 +469,24 @@ def render_models(db):
                         "updated_at": current_time()
                     }
 
-                    db.models.update_one(
+                    ss.db.models.update_one(
                         {"name": model_to_edit},
                         {"$set": update_data}
                     )
                     st.success(f"Model '{model_to_edit}' updated successfully!")
                     st.balloons()
-                    st.session_state.edit_model_name = None
-                    st.session_state.edit_model_data = None
+                    ss.edit_model_name = None
+                    ss.edit_model_data = None
                     st.rerun()
             
             with col8:
                 if st.form_submit_button("Cancel"):
-                    st.session_state.edit_model_name = None
-                    st.session_state.edit_model_data = None
+                    ss.edit_model_name = None
+                    ss.edit_model_data = None
                     st.rerun()
     
     if model_action == "Delete":
-        scratch_pad_chat = db.chats.find_one({"name": "Scratch Pad"})
+        scratch_pad_chat = ss.db.chats.find_one({"name": "Scratch Pad"})
         scratch_pad_model = scratch_pad_chat.get("model") if scratch_pad_chat else None
         
         protected_models = [config.DEFAULT_MODEL, config.DECISION_MODEL]
@@ -470,7 +495,7 @@ def render_models(db):
         
         protected_models = list(set(protected_models))
         
-        available_models = list(db.models.find(
+        available_models = list(ss.db.models.find(
             {"name": {"$nin": protected_models}}, 
             {"name": 1, "_id": 0}
         ))
@@ -495,12 +520,12 @@ def render_models(db):
                     if model_to_delete in protected_models:
                         st.error(f"Cannot delete protected model '{model_to_delete}'.")
                     else:
-                        result = db.models.delete_one({"name": model_to_delete})
+                        result = ss.db.models.delete_one({"name": model_to_delete})
                         
                         if result.deleted_count > 0:
-                            if st.session_state.get('edit_model_name') == model_to_delete:
-                                st.session_state.edit_model_name = None
-                                st.session_state.edit_model_data = None
+                            if ss.get('edit_model_name') == model_to_delete:
+                                ss.edit_model_name = None
+                                ss.edit_model_data = None
                             st.success(f"Model '{model_to_delete}' deleted successfully!")
                             st.balloons()
                             sleep(2)
@@ -508,61 +533,64 @@ def render_models(db):
                         else:
                             st.error(f"Could not delete model '{model_to_delete}'.")
 
-def manage_UI(db):
+def manage_UI():
     st.sidebar.markdown("### :blue[Active Chat] 🎯")
-    st.sidebar.markdown(f"**Chat Name:** :blue[{st.session_state.active_chat.get('name', 'N/A')}]")
-    st.sidebar.markdown(f"**Model:** :blue[{st.session_state.active_chat.get('model', 'N/A')}]")
+    st.sidebar.markdown(f"**Chat Name:** :blue[{ss.active_chat.get('name', 'N/A')}]")
+    st.sidebar.markdown(f"**Model:** :blue[{ss.active_chat.get('model', 'N/A')}]")
     st.sidebar.divider()
 
     col1, col2, col3 = st.sidebar.columns(3)
-    if col1.button("💬", help="Chat with Gemini", use_container_width=True): st.session_state.app_mode = "chat"
-    if col2.button("🧹", help="Clear active chat history", use_container_width=True): st.session_state.app_mode = "clear_chat"
-    if col3.button("🗑️", help="Delete active chat", use_container_width=True): st.session_state.app_mode = "delete_chat"
+    if col1.button("💬", help="Chat with Gemini", use_container_width=True): ss.app_mode = "chat"
+    if col2.button("🧹", help="Clear active chat history", use_container_width=True): ss.app_mode = "clear_chat"
+    if col3.button("🗑️", help="Delete active chat", use_container_width=True): ss.app_mode = "delete_chat"
 
     # First row - 4 buttons
     colA, colB, colC, colD = st.sidebar.columns(4)
-    if colA.button("🆕", help="New chat", use_container_width=True): st.session_state.app_mode = "new_chat"
-    if colB.button("🤖", help="Manage models", use_container_width=True): st.session_state.app_mode = "models"
-    if colC.button("📂", help="Manage chat archiving", use_container_width=True): st.session_state.app_mode = "archive"
-    if colD.button("🐞", help="Debug panel - View internal agent conversations", use_container_width=True): st.session_state.app_mode = "debug"
+    if colA.button("🆕", help="New chat", use_container_width=True): ss.app_mode = "new_chat"
+    if colB.button("🤖", help="Manage models", use_container_width=True): ss.app_mode = "models"
+    if colC.button("📂", help="Manage chat archiving", use_container_width=True): ss.app_mode = "archive"
+    if colD.button("📝", help="Publish chat as podcast", use_container_width=True): ss.app_mode = "publish"
     
-    # Second row - Profile and Settings buttons
-    col_profile, col_settings = st.sidebar.columns(2)
+    # Second row - Profile, Settings, and Debug buttons
+    col_profile, col_settings, col_debug = st.sidebar.columns(3)
     with col_profile:
         if st.button("👤", help="Manage user profile and personalization", use_container_width=True): 
-            st.session_state.app_mode = "profile"
+            ss.app_mode = "profile"
     with col_settings:
         if st.button("⚙️", help="Configure app behavior and preferences", use_container_width=True):
-            st.session_state.app_mode = "settings"
+            ss.app_mode = "settings"
+    with col_debug:
+        if st.button("🐞", help="Debug panel - View internal agent conversations", use_container_width=True):
+            ss.app_mode = "debug"
 
-    chat_docs_for_options = make_chat_list(db)
+    chat_docs_for_options = make_chat_list()
     st.sidebar.markdown("### Select Chat")
     
     try:
         chat_names = [chat['name'] for chat in chat_docs_for_options]
-        default_index = chat_names.index(st.session_state.active_chat['name'])
+        default_index = chat_names.index(ss.active_chat['name'])
     except (ValueError, KeyError, AttributeError):
         default_index = 0
 
     def handle_chat_selection():
         logger.debug("Chat selection triggered")
-        logger.debug(f"Selected chat name: {st.session_state.chat_selector_name}")
-        logger.debug(f"Current active_chat before change: {st.session_state.active_chat.get('name', 'None') if st.session_state.active_chat else 'None'}")
+        logger.debug(f"Selected chat name: {ss.chat_selector_name}")
+        logger.debug(f"Current active_chat before change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
         
         # Clear metrics when switching chats
-        if hasattr(st.session_state, 'last_response_metrics'):
-            delattr(st.session_state, 'last_response_metrics')
+        if hasattr(ss, 'last_response_metrics'):
+            delattr(ss, 'last_response_metrics')
         
-        st.session_state.app_mode = "chat"
-        selected_chat_name = st.session_state.chat_selector_name
+        ss.app_mode = "chat"
+        selected_chat_name = ss.chat_selector_name
         for chat in chat_docs_for_options:
             if chat['name'] == selected_chat_name:
                 logger.debug(f"Found chat document keys: {list(chat.keys())}")
                 logger.debug(f"Chat has messages field: {'messages' in chat}")
-                st.session_state.active_chat = chat
+                ss.active_chat = chat
                 break
     
-    logger.debug(f"Active chat after change: {st.session_state.active_chat.get('name', 'None') if st.session_state.active_chat else 'None'}")
+    logger.debug(f"Active chat after change: {ss.active_chat.get('name', 'None') if ss.active_chat else 'None'}")
 
     st.sidebar.radio(
         "Available Chats", options=[doc['name'] for doc in chat_docs_for_options], 
@@ -581,12 +609,17 @@ def render_profile():
     import profile_ui
     profile_ui.render_user_profile()
 
-def make_chat_list(db):
+def render_publish():
+    """Render the chat publication interface"""
+    from chat_publisher import render_publish_interface
+    render_publish_interface()
+
+def make_chat_list():
     scratch_pad_filter = {"name": "Scratch Pad", "archived": False}
     projection = {"name": 1, "updated_at": 1, "_id": 1, "messages": 1, "model": 1, "system_prompt": 1}
-    scratch_pad_doc = db.chats.find_one(scratch_pad_filter, projection)
+    scratch_pad_doc = ss.db.chats.find_one(scratch_pad_filter, projection)
     other_chats_filter = {"name": {"$ne": "Scratch Pad"}, "archived": False}
-    other_chats_cursor = db.chats.find(
+    other_chats_cursor = ss.db.chats.find(
         other_chats_filter, 
         projection
     ).sort("updated_at", -1)

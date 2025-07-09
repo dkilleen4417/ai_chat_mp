@@ -10,6 +10,9 @@ import streamlit as st
 import config
 from logger import logger
 
+# Session state alias for consistency
+ss = st.session_state
+
 class UserProfileManager:
     """Manages user profile data and context injection"""
     
@@ -176,9 +179,9 @@ class UserProfileManager:
 
 def get_user_profile_manager():
     """Get user profile manager instance"""
-    if 'user_profile_manager' not in st.session_state:
+    if 'user_profile_manager' not in ss:
         from main import get_database
         db = get_database()
-        st.session_state.user_profile_manager = UserProfileManager(db)
+        ss.user_profile_manager = UserProfileManager(db)
     
-    return st.session_state.user_profile_manager
+    return ss.user_profile_manager

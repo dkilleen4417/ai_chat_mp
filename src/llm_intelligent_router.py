@@ -9,6 +9,7 @@ import time
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
+from datetime import datetime
 import google.generativeai as genai
 import streamlit as st
 
@@ -16,6 +17,55 @@ import streamlit as st
 from intelligent_router import RouteType, RoutingDecision
 
 logger = logging.getLogger(__name__)
+
+# Usage tracking for backup function monitoring
+class RoutingUsageTracker:
+    """Track usage of primary LLM vs backup rule-based routing"""
+    
+    def __init__(self):
+        self.llm_success_count = 0
+        self.backup_usage_count = 0
+        self.total_requests = 0
+        self.last_backup_time = None
+        self.backup_reasons = []
+        
+    def log_llm_success(self, query: str, decision: RoutingDecision):
+        """Log successful LLM routing decision"""
+        self.llm_success_count += 1
+        self.total_requests += 1
+        logger.info(f"LLM_ROUTING_SUCCESS: Query='{query[:50]}...' Route={decision.route_type.value} Confidence={decision.confidence:.2f}")
+        
+    def log_backup_usage(self, query: str, reason: str, decision: RoutingDecision):
+        """Log when backup rule-based routing is used"""
+        self.backup_usage_count += 1
+        self.total_requests += 1
+        self.last_backup_time = datetime.now()
+        self.backup_reasons.append(reason)
+        
+        logger.warning(f"BACKUP_ROUTING_USED: Query='{query[:50]}...' Reason='{reason}' Route={decision.route_type.value} Confidence={decision.confidence:.2f}")
+        
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Get current usage statistics"""
+        if self.total_requests == 0:
+            return {"llm_success_rate": 0, "backup_usage_rate": 0, "total_requests": 0}
+            
+        return {
+            "llm_success_count": self.llm_success_count,
+            "backup_usage_count": self.backup_usage_count,
+            "total_requests": self.total_requests,
+            "llm_success_rate": self.llm_success_count / self.total_requests,
+            "backup_usage_rate": self.backup_usage_count / self.total_requests,
+            "last_backup_time": self.last_backup_time.isoformat() if self.last_backup_time else None,
+            "recent_backup_reasons": self.backup_reasons[-5:] if self.backup_reasons else []
+        }
+        
+    def log_stats_summary(self):
+        """Log summary statistics"""
+        stats = self.get_usage_stats()
+        logger.info(f"ROUTING_STATS: LLM_Success={stats['llm_success_count']} Backup_Used={stats['backup_usage_count']} Success_Rate={stats['llm_success_rate']:.2%} Backup_Rate={stats['backup_usage_rate']:.2%}")
+
+# Global tracker instance
+usage_tracker = RoutingUsageTracker()
 
 # Comprehensive system prompt for routing decisions
 COMPREHENSIVE_ROUTING_PROMPT = """You are an expert AI Query Router for a multi-modal AI assistant. Your job is to analyze user queries and determine the optimal routing strategy to provide the most accurate, helpful response.
@@ -214,10 +264,15 @@ class LLMIntelligentRouter:
         
         if llm_decision:
             logger.debug(f"LLM routing successful: {llm_decision.route_type.value}")
+            # Track successful LLM usage
+            usage_tracker.log_llm_success(query, llm_decision)
             return llm_decision
         else:
             logger.warning(f"LLM routing failed, using fallback")
-            return self.make_fallback_routing_decision(query)
+            # Use fallback and track backup usage
+            fallback_decision = self.make_fallback_routing_decision(query)
+            usage_tracker.log_backup_usage(query, "LLM routing failed", fallback_decision)
+            return fallback_decision
     
     def assess_tool_confidence(self, query: str, tool_name: str):
         """Legacy method for compatibility - redirects to fallback"""

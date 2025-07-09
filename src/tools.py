@@ -12,6 +12,9 @@ import streamlit as st
 import requests
 import logging
 
+# Session state alias for consistency
+ss = st.session_state
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -23,7 +26,7 @@ def brave_search(query: str, num_results: int = 3) -> str:
     """Search the web using Brave Search API and return a formatted string."""
     headers = {
         "Accept": "application/json",
-        "X-Subscription-Token": st.session_state.brave_api_key,
+        "X-Subscription-Token": ss.brave_api_key,
     }
     params = {"q": query, "count": num_results}
 
@@ -54,7 +57,7 @@ def brave_search(query: str, num_results: int = 3) -> str:
 def serper_search(query: str, num_results: int = 3) -> str:
     """Search Google via Serper.dev and return a formatted string."""
     headers = {
-        "X-API-KEY": st.session_state.serper_api_key, 
+        "X-API-KEY": ss.serper_api_key, 
         "Content-Type": "application/json"
     }
     params = {"q": query, "num": num_results}
@@ -101,20 +104,47 @@ def get_weather_forecast(location: str, days: int = 3) -> str:
         
         logger.info(f"Fetching weather for location: {location}")
         
-        # Get current weather and basic info
-        current_url = "https://api.openweathermap.org/data/2.5/weather"
-        current_params = {
-            "q": location,
-            "appid": api_key,
-            "units": "imperial"  # Fahrenheit, mph
-        }
+        # Try different location formats if first one fails
+        location_formats = [
+            location,
+            f"{location},US" if ",US" not in location else location,
+            location.replace(",MD", ",MD,US"),
+            location.replace(",CA", ",CA,US"),
+            location.replace(",TX", ",TX,US"),
+            location.replace(",FL", ",FL,US"),
+            location.replace(",NY", ",NY,US"),
+        ]
         
-        current_resp = requests.get(current_url, params=current_params, timeout=10)
-        current_resp.raise_for_status()
-        current_data = current_resp.json()
+        current_data = None
+        last_error = None
         
-        if current_resp.status_code != 200:
-            return f"Could not find location: {location}. Please try a different format (e.g., 'City,Country')."
+        for loc_format in location_formats:
+            try:
+                logger.debug(f"Trying location format: {loc_format}")
+                current_url = "https://api.openweathermap.org/data/2.5/weather"
+                current_params = {
+                    "q": loc_format,
+                    "appid": api_key,
+                    "units": "imperial"  # Fahrenheit, mph
+                }
+                
+                current_resp = requests.get(current_url, params=current_params, timeout=10)
+                
+                if current_resp.status_code == 200:
+                    current_data = current_resp.json()
+                    logger.info(f"Successfully found location with format: {loc_format}")
+                    break
+                else:
+                    last_error = f"Status {current_resp.status_code} for {loc_format}"
+                    logger.debug(f"Failed with format {loc_format}: {current_resp.status_code}")
+                    
+            except Exception as e:
+                last_error = str(e)
+                logger.debug(f"Error with format {loc_format}: {e}")
+                continue
+        
+        if not current_data:
+            return f"Could not find location: {location}. Tried multiple formats. Last error: {last_error}"
         
         # Extract coordinates for forecast
         lat = current_data["coord"]["lat"]
@@ -135,14 +165,21 @@ def get_weather_forecast(location: str, days: int = 3) -> str:
         forecast_resp.raise_for_status()
         forecast_data = forecast_resp.json()
         
-        # Format current weather
+        # Format current weather with timestamp
         current_temp = round(current_data["main"]["temp"])
         feels_like = round(current_data["main"]["feels_like"])
         humidity = current_data["main"]["humidity"]
         description = current_data["weather"][0]["description"].title()
         wind_speed = round(current_data["wind"]["speed"])
         
+        # Add timestamp information
+        from datetime import datetime
+        current_time = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        data_time = datetime.fromtimestamp(current_data["dt"]).strftime("%Y-%m-%d %I:%M %p")
+        
         result = [f"🌍 Weather for {city_name}, {country}:"]
+        result.append(f"📅 Retrieved: {current_time}")
+        result.append(f"📊 Data Time: {data_time}")
         result.append(f"Current: {current_temp}°F (feels like {feels_like}°F)")
         result.append(f"{description}, Humidity: {humidity}%, Wind: {wind_speed} mph")
         result.append("")
@@ -208,7 +245,7 @@ def enhance_user_query(original_query: str) -> str:
     """
     try:
         # Get the decision model from session state
-        if not hasattr(st.session_state, 'decision_model'):
+        if not hasattr(ss, 'decision_model'):
             return original_query  # Fallback to original if no decision model
         
         enhancement_prompt = f"""You are a query enhancement specialist. Your job is to rewrite user queries to better utilize available tools while preserving the user's intent.
@@ -232,7 +269,7 @@ Enhanced query (or return original if no enhancement needed):"""
 
         messages = [{"role": "user", "parts": [enhancement_prompt]}]
         
-        response = st.session_state.decision_model.generate_content(contents=messages)
+        response = ss.decision_model.generate_content(contents=messages)
         enhanced_query = response.text.strip()
         
         # Basic validation - if enhancement seems off, use original
@@ -324,6 +361,8 @@ def get_home_weather(include_forecast: bool = True) -> str:
         
         # Debug logging for key values
         logger.debug(f"Parsed values - timestamp: {timestamp}, temp_c: {temp_c}, humidity: {humidity}, wind_avg: {wind_avg}")
+        logger.debug(f"All observation keys: {list(latest_obs.keys())}")
+        logger.debug(f"Full observation data: {latest_obs}")
         
         # Convert Celsius to Fahrenheit
         temp_f = round((temp_c * 9/5) + 32) if temp_c is not None else None
@@ -346,13 +385,25 @@ def get_home_weather(include_forecast: bool = True) -> str:
         except (ValueError, OSError):
             obs_time = "Invalid timestamp"
         
+        # Add retrieval timestamp  
+        retrieval_time = datetime.now().strftime("%Y-%m-%d %I:%M %p")
+        
         result = [f"🏠 Home Weather Station (as of {obs_time}):"]
+        result.append(f"📅 Retrieved: {retrieval_time}")
+        result.append(f"🔗 Station ID: {station_id}")
+        result.append("")
         
         if temp_f is not None:
             result.append(f"Temperature: {temp_f}°F ({temp_c:.1f}°C)")
+        else:
+            result.append("⚠️ Temperature: Not available")
+            logger.warning("Temperature data not available in PWS response")
         
         if humidity is not None:
             result.append(f"Humidity: {humidity}%")
+        else:
+            result.append("⚠️ Humidity: Not available")
+            logger.warning("Humidity data not available in PWS response")
         
         if wind_avg is not None:
             wind_dir_str = wind_dir_to_compass(wind_direction)
@@ -431,6 +482,37 @@ def get_home_weather(include_forecast: bool = True) -> str:
     except Exception as e:
         logger.error(f"Unexpected error in get_home_weather: {str(e)}", exc_info=True)
         return f"WeatherFlow error: {str(e)}"
+
+
+def debug_weather_tools() -> str:
+    """Debug function to test weather tools and show raw responses"""
+    try:
+        from datetime import datetime
+        
+        result = [f"🔍 Weather Tools Debug Report - {datetime.now().strftime('%Y-%m-%d %I:%M %p')}"]
+        result.append("=" * 60)
+        
+        # Test PWS tool
+        result.append("\n📊 PWS Tool Test:")
+        try:
+            pws_result = get_pws_current_conditions()
+            result.append(f"PWS Response: {pws_result}")
+        except Exception as e:
+            result.append(f"PWS Error: {str(e)}")
+        
+        # Test weather forecast
+        result.append("\n🌍 Weather Forecast Test (Catonsville, MD):")
+        try:
+            forecast_result = get_weather_forecast("Catonsville,MD", 1)
+            result.append(f"Forecast Response: {forecast_result}")
+        except Exception as e:
+            result.append(f"Forecast Error: {str(e)}")
+        
+        result.append("\n" + "=" * 60)
+        return "\n".join(result)
+        
+    except Exception as e:
+        return f"Debug function error: {str(e)}"
 
 
 class ToolRegistry:
@@ -582,6 +664,18 @@ tool_registry.register_tool(
     }
 )
 
+# Register debug tool
+tool_registry.register_tool(
+    debug_weather_tools,
+    "debug_weather_tools",
+    "Debug weather tools by testing PWS and weather forecast responses. Use this when weather readings seem incorrect.",
+    params_schema={
+        "type": "OBJECT",
+        "properties": {},
+        "required": []
+    }
+)
+
 __all__ = [
     "enhance_user_query",
     "brave_search",
@@ -589,6 +683,7 @@ __all__ = [
     "get_weather_forecast",
     "get_pws_current_conditions",
     "get_home_weather",
+    "debug_weather_tools",
     "tool_registry",
     "ToolRegistry",
 ]

@@ -33,12 +33,16 @@ def enhance_system_prompt(original_prompt: str) -> str:
 
 {original_prompt}
 
-Remember to use the user's personal context (location, weather station, preferences) when relevant to their queries."""
+Remember to use the user's personal context (location, weather station, preferences) when relevant to their queries.
+
+CRITICAL: When using tool/function call results, you MUST use the EXACT values returned by the tools. Do not approximate, round, or generate similar values. If a tool returns "74°F", you must state "74°F" exactly. This is especially important for weather data, prices, measurements, and other precise information."""
         else:
             # If no original prompt, just use user context
             enhanced_prompt = f"""{user_context}
 
-Be helpful, accurate, and use the user's personal context when relevant to their queries."""
+Be helpful, accurate, and use the user's personal context when relevant to their queries.
+
+CRITICAL: When using tool/function call results, you MUST use the EXACT values returned by the tools. Do not approximate, round, or generate similar values. If a tool returns "74°F", you must state "74°F" exactly. This is especially important for weather data, prices, measurements, and other precise information."""
         
         return enhanced_prompt
         
