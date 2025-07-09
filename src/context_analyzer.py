@@ -192,27 +192,180 @@ Respond with ONLY the JSON object, no other text."""
         return "\n".join(summary_lines) if summary_lines else "No meaningful context"
     
     def get_optimal_context_window(self, analysis_result: Dict[str, Any], full_history: List[Dict]) -> List[Dict]:
-        """Get optimal context window based on analysis"""
+        """Get optimal context window based on analysis with topic establishment awareness"""
         
-        if not analysis_result["needs_full_context"]:
-            # For standalone questions, just include the current question
-            if full_history:
-                return [full_history[-1]]  # Only the current user message
-            else:
-                return []
+        if not full_history:
+            return []
         
-        # For context-dependent questions, include relevant history
-        confidence = analysis_result.get("confidence", 0.5)
+        current_question = full_history[-1]
+        conversation_history = full_history[:-1]
         
-        if confidence > 0.8:
-            # High confidence - use minimal context (last 5 messages)
-            return full_history[-5:] if len(full_history) > 5 else full_history
-        elif confidence > 0.6:
-            # Medium confidence - use moderate context (last 10 messages)
-            return full_history[-10:] if len(full_history) > 10 else full_history
+        # Check topic establishment
+        topic_info = self.detect_topic_establishment(conversation_history)
+        
+        # Calculate relevance score for current question
+        relevance_score = self.calculate_conversation_relevance(
+            current_question.get("content", ""), 
+            conversation_history
+        )
+        
+        # Add debug logging
+        from debug_utils import add_debug_log
+        add_debug_log(f"🎯 Topic Established: {topic_info['topic_established']}")
+        if topic_info["topic_established"]:
+            add_debug_log(f"📋 Main Topic: {topic_info.get('main_topic', 'Unknown')}")
+        add_debug_log(f"📊 Question Relevance: {relevance_score:.2f}")
+        
+        # Decision logic based on topic establishment and relevance
+        if not topic_info["topic_established"]:
+            # No established topic - everything is exploratory, use standalone context
+            add_debug_log("🔍 No topic established - using standalone context")
+            return [current_question]
+        
+        elif relevance_score < 0.3:
+            # Low relevance to established topic - treat as interruption
+            add_debug_log("⚡ Low relevance interruption - using standalone context")
+            return [current_question]
+        
         else:
-            # Low confidence - use full context for safety
-            return full_history
+            # High relevance to established topic - use contextual response
+            confidence = analysis_result.get("confidence", 0.5)
+            
+            if confidence > 0.8:
+                # High confidence - use recent relevant context
+                relevant_messages = self._filter_by_relevance(conversation_history[-8:], 0.3)
+                context_window = relevant_messages + [current_question]
+                add_debug_log(f"🎯 High confidence context - {len(context_window)} messages")
+                return context_window
+            
+            elif confidence > 0.6:
+                # Medium confidence - broader relevant context
+                relevant_messages = self._filter_by_relevance(conversation_history[-12:], 0.2)
+                context_window = relevant_messages + [current_question]
+                add_debug_log(f"🎯 Medium confidence context - {len(context_window)} messages")
+                return context_window
+            
+            else:
+                # Low confidence - use more context for safety
+                add_debug_log(f"🎯 Low confidence - using full context ({len(full_history)} messages)")
+                return full_history
+    
+    def _filter_by_relevance(self, messages: List[Dict], threshold: float) -> List[Dict]:
+        """Filter messages by relevance score threshold"""
+        filtered = []
+        for msg in messages:
+            relevance = msg.get("relevance_score", 1.0)  # Default to relevant if no score
+            if relevance >= threshold:
+                filtered.append(msg)
+        return filtered
+
+    def detect_topic_establishment(self, messages: List[Dict]) -> Dict[str, Any]:
+        """Detect if a conversational topic has been established using LLM analysis"""
+        
+        if len(messages) < 4:
+            return {
+                "topic_established": False, 
+                "main_topic": None,
+                "confidence": 0.0,
+                "reasoning": "Insufficient messages for topic establishment"
+            }
+        
+        # Get recent conversation for analysis
+        recent_messages = messages[-8:] if len(messages) > 8 else messages
+        
+        # Build conversation text for analysis
+        conversation_lines = []
+        for msg in recent_messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if content.strip():
+                conversation_lines.append(f"{role.upper()}: {content}")
+        
+        conversation_text = "\n".join(conversation_lines)
+        
+        try:
+            if hasattr(ss, 'decision_model') and ss.decision_model:
+                topic_prompt = f"""Analyze this conversation to determine if a main conversational topic has been established.
+
+CONVERSATION:
+{conversation_text}
+
+A topic is "established" when there are multiple exchanges about the same subject showing sustained discussion, not just single Q&A pairs or rapid topic switching.
+
+Respond with ONLY a JSON object:
+{{
+    "topic_established": true/false,
+    "main_topic": "brief description or null",
+    "confidence": 0.0-1.0
+}}"""
+
+                response = ss.decision_model.generate_content(topic_prompt)
+                
+                # Parse JSON response
+                import json
+                result = json.loads(response.text.strip())
+                
+                # Add reasoning for debugging
+                result["reasoning"] = f"LLM analysis based on {len(recent_messages)} recent messages"
+                
+                logger.info(f"Topic establishment analysis: {result}")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Topic establishment analysis failed: {e}")
+        
+        # Fallback to simple heuristic
+        return {
+            "topic_established": len(messages) > 6,
+            "main_topic": "Extended conversation" if len(messages) > 6 else None,
+            "confidence": 0.5,
+            "reasoning": "Fallback heuristic - topic assumed established after 6+ messages"
+        }
+    
+    def calculate_conversation_relevance(self, current_question: str, chat_history: List[Dict]) -> float:
+        """Calculate how relevant current question is to ongoing conversation (0.0-1.0)"""
+        
+        if len(chat_history) < 3:
+            return 1.0  # Short conversations, everything is relevant
+        
+        # First check if topic is established
+        topic_info = self.detect_topic_establishment(chat_history)
+        
+        if not topic_info["topic_established"]:
+            # No established topic - treat as exploratory conversation
+            return 1.0
+        
+        # Topic is established - assess relevance to main topic
+        main_topic = topic_info.get("main_topic", "the ongoing conversation")
+        recent_context = chat_history[-6:]  # Recent conversation context
+        context_text = " ".join([msg.get("content", "") for msg in recent_context])
+        
+        try:
+            if hasattr(ss, 'decision_model') and ss.decision_model:
+                relevance_prompt = f"""Rate how relevant this new question is to the established conversation topic.
+
+ESTABLISHED TOPIC: {main_topic}
+
+RECENT CONVERSATION CONTEXT:
+{context_text[:400]}
+
+NEW QUESTION: {current_question}
+
+Respond with ONLY a number between 0.0 and 1.0:
+- 1.0 = Directly continues the established topic
+- 0.5 = Somewhat related to the topic  
+- 0.0 = Complete topic change/interruption (like asking about weather during coding discussion)"""
+
+                response = ss.decision_model.generate_content(relevance_prompt)
+                score = float(response.text.strip())
+                return max(0.0, min(1.0, score))  # Clamp to 0.0-1.0
+                
+        except Exception as e:
+            logger.warning(f"Relevance calculation failed: {e}")
+        
+        # Fallback: Use existing standalone detection
+        analysis = self._pattern_analyze_context(current_question, chat_history)
+        return 0.2 if analysis["question_type"] == "standalone" else 0.8
 
     def _analyze_new_chat_suggestion(self, current_question: str, chat_history: List[Dict], analysis_result: Dict) -> Dict[str, Any]:
         """

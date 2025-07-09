@@ -1,5 +1,6 @@
 import streamlit as st
 from time import time as current_time, sleep
+from typing import Dict
 from logger import logger
 from utils import format_response_metrics
 from debug_utils import add_debug_log
@@ -134,7 +135,8 @@ def render_chat(search_manager, apply_intelligent_routing, optimize_search_query
         if hasattr(ss, 'last_response_metrics'):
             delattr(ss, 'last_response_metrics')
         
-        user_message = {"role": "user", "content": prompt, "timestamp": current_time()}
+        # Create enhanced user message with relevance scoring
+        user_message = create_enhanced_user_message(prompt)
         ss.active_chat["messages"].append(user_message)
         with message_container.chat_message("user", avatar=ss.user_avatar):
             st.markdown(prompt)
@@ -613,6 +615,31 @@ def render_publish():
     """Render the chat publication interface"""
     from chat_publisher import render_publish_interface
     render_publish_interface()
+
+def create_enhanced_user_message(prompt: str) -> Dict:
+    """Create user message with relevance metadata"""
+    from context_analyzer import context_analyzer
+    
+    # Calculate relevance score
+    relevance_score = context_analyzer.calculate_conversation_relevance(
+        prompt, ss.active_chat["messages"]
+    )
+    
+    # Get topic establishment info for debugging
+    topic_info = context_analyzer.detect_topic_establishment(ss.active_chat["messages"])
+    
+    # Add debug logging
+    from debug_utils import add_debug_log
+    add_debug_log(f"💬 User Message: '{prompt[:50]}...'")
+    add_debug_log(f"📊 Calculated Relevance: {relevance_score:.2f}")
+    
+    return {
+        "role": "user",
+        "content": prompt,
+        "timestamp": current_time(),
+        "relevance_score": relevance_score,
+        "topic_info": topic_info  # Store for potential future use
+    }
 
 def make_chat_list():
     scratch_pad_filter = {"name": "Scratch Pad", "archived": False}

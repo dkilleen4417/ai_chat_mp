@@ -26,7 +26,18 @@
 ## Development Workflow Commands
 
 ### WHEN USER SAYS "/BREAKPOINT" - DO THIS:
-1. **Create MongoDB Backup**
+1. **Verify Master Branch**
+   ```bash
+   current_branch=$(git branch --show-current)
+   if [ "$current_branch" != "master" ]; then
+       echo "❌ BREAKPOINT can only be run from 'master' branch"
+       echo "Current branch: $current_branch"
+       echo "Use '/PROMOTE' first to merge your branch, then run '/BREAKPOINT'"
+       exit 1
+   fi
+   ```
+
+2. **Create MongoDB Backup**
    ```bash
    mongodump --db ai_chat_mp --out temp_backup
    mkdir -p mongo_backups
@@ -35,9 +46,9 @@
    rm -rf temp_backup
    ```
 
-2. **Update PROJECT_STATE.md** with current development status and recent changes
+3. **Update PROJECT_STATE.md** with current development status and recent changes
 
-3. **Execute Git Workflow**
+4. **Execute Git Workflow**
    ```bash
    git add .
    git commit -m "Development checkpoint: [analyze changes and create intelligent summary]"
