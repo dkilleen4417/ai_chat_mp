@@ -7,7 +7,6 @@ import config
 import google.generativeai as genai
 import json
 from logger import logger
-from providers import initialize_provider_manager, generate_chat_response_with_providers
 from query_optimizer import optimize_search_query
 from search_manager import SearchManager
 from llm_intelligent_router import llm_intelligent_router as intelligent_router, RouteType
@@ -137,6 +136,9 @@ def initialize():
     ss.initialized = True
     ss.app_mode = "chat"
     ss.gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+    ss.anthropic_api_key = st.secrets.get("ANTHROPIC_API_KEY")
+    ss.xai_api_key = st.secrets.get("XAI_API_KEY")
+    ss.openai_api_key = st.secrets.get("OPENAI_API_KEY")
     ss.serper_api_key = st.secrets.get("SERPER_API_KEY")
     ss.brave_api_key = st.secrets.get("BRAVE_API_KEY")       
     ss.db = get_database()
@@ -145,56 +147,19 @@ def initialize():
     ss.llm_avatar = config.LLM_AVATAR
     ss.user_avatar = config.USER_AVATAR
     ss.models = list(ss.db.models.find())
-    
-    # Initialize provider manager instead of individual model setup
-    initialize_provider_manager()
+    ss.api_endpoints = {
+        'google': None,
+        'anthropic': config.ANTHROPIC_API_URL,
+        'openai': config.OPENAI_API_URL,
+        'xai': config.XAI_API_URL,
+        'ollama': config.OLLAMA_BASE_URL
+    }
     
     # Keep decision model for search grounding (legacy, now using intelligent router)
     genai.configure(api_key=ss.gemini_api_key)
     set_decision_model()
     ss.apply_intelligent_routing = apply_intelligent_routing
 
-
-
-def generate_chat_response(search_results: Optional[str] = None):
-    """Generates a chat response from the selected model with metrics."""
-    try:
-        # Generate response using the provider system (returns structured object)
-        response_obj = generate_chat_response_with_providers(search_results)
-        
-        # Extract text for backward compatibility
-        if isinstance(response_obj, dict) and "text" in response_obj:
-            return response_obj["text"]
-        else:
-            # Fallback for old format
-            return response_obj
-        
-    except Exception as e:
-        st.error(f"Error generating response: {e}")
-        return "Sorry, I encountered an error while generating a response."
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 def main():
     try:
         # Initialize the application if not already initialized
@@ -207,7 +172,6 @@ def main():
                 SearchManager(),
                 apply_intelligent_routing,
                 optimize_search_query,
-                generate_chat_response_with_providers,
             ),
             "new_chat": ui.render_new,
             "clear_chat": ui.render_clear,

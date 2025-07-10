@@ -6,6 +6,7 @@ from utils import format_response_metrics
 from debug_utils import add_debug_log
 import debug_panel
 import config
+import providers
 
 # Session state alias for consistency
 ss = st.session_state
@@ -117,7 +118,7 @@ def render_new():
         ss.app_mode = "chat"
         st.rerun()
 
-def render_chat(search_manager, apply_intelligent_routing, optimize_search_query, generate_chat_response_with_providers):
+def render_chat(search_manager, apply_intelligent_routing, optimize_search_query):
     st.title(f"💬 {ss.active_chat['name']}")
     message_container = st.container(height=600, border=True)
 
@@ -168,7 +169,23 @@ def render_chat(search_manager, apply_intelligent_routing, optimize_search_query
         
         with st.spinner("🤖 Thinking..."):
             add_debug_log("🤖 Generating AI response...")
-            response_obj = generate_chat_response_with_providers(search_results=search_results_text)
+            
+            # Call provider directly
+            messages = ss.active_chat.get("messages", [])
+            model_config = ss.db.models.find_one({"name": ss.active_chat['model']})
+            provider_name = model_config["provider"]
+            
+            # Provider function mapping
+            provider_functions = {
+                "google": providers.generate_google_response,
+                "anthropic": providers.generate_anthropic_response,
+                "xai": providers.generate_grok_response,
+                "openai": providers.generate_openai_response,
+                "ollama": providers.generate_ollama_response
+            }
+            
+            response_obj = provider_functions[provider_name](messages, model_config, search_results_text)
+            
             add_debug_log("✅ AI response generated successfully")
 
         # Handle structured response format
