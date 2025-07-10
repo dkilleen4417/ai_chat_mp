@@ -74,8 +74,9 @@ COMPREHENSIVE_ROUTING_PROMPT = """You are an expert AI Query Router for a multi-
 1. **get_weather_forecast** - Get weather forecast for any worldwide location (1-5 days)
 2. **get_home_weather** - Get weather from user's personal weather station at home
 3. **get_pws_current_conditions** - Get current conditions from Personal Weather Station (PWS)
-4. **brave_search** - General web search using Brave (privacy-focused, diverse results)
-5. **serper_search** - Google-powered search via Serper (structured data, local results)
+4. **get_what3words_address** - Convert any street address to a What3Words address (3 unique words for precise location)
+5. **brave_search** - General web search using Brave (privacy-focused, diverse results)
+6. **serper_search** - Google-powered search via Serper (structured data, local results)
 
 **ROUTING OPTIONS:**
 - **tool_direct**: Use a specific tool immediately (high confidence)
@@ -92,6 +93,12 @@ COMPREHENSIVE_ROUTING_PROMPT = """You are an expert AI Query Router for a multi-
 - "weather at home/my weather" → get_home_weather
 - "PWS/weather station" → get_pws_current_conditions
 - "temperature outside" → get_home_weather (if ambiguous location)
+
+**Location/Address Queries → Tools:**
+- "What3Words for [address]" → get_what3words_address
+- "W3W address for [location]" → get_what3words_address
+- "Get me the three word address" → get_what3words_address
+- "Convert address to W3W" → get_what3words_address
 
 **Current Events/Facts → Search:**
 - Recent news, events, stock prices → brave_search

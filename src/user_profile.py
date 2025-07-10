@@ -24,25 +24,25 @@ class UserProfileManager:
         """Get default user profile structure"""
         return {
             "user_id": "default_user",
-            "name": "User",
+            "name": "Drew",
             "personal_info": {
                 "email": "",
                 "phone": ""
             },
             "home_address": {
-                "street": "",
-                "city": "",
-                "state": "",
-                "zip": "",
+                "street": "317 N Beaumont Ave",
+                "city": "Catonsville",
+                "state": "Maryland",
+                "zip": "21228-4303",
                 "country": "US"
             },
             "coordinates": {
-                "latitude": None,
-                "longitude": None,
-                "w3w": "",  # What3Words
-                "accuracy": "unknown"
+                "latitude": 39.2707,
+                "longitude": -76.7351,
+                "w3w": "boom.unable.habit",  # What3Words
+                "accuracy": "address"
             },
-            "timezone": "America/Los_Angeles",
+            "timezone": "America/New_York",
             "weather_station": {
                 "provider": "weatherflow",
                 "station_id": st.secrets.get("WEATHERFLOW_STATION_ID", ""),
@@ -123,9 +123,20 @@ class UserProfileManager:
             if coords.get("w3w"):
                 context_parts.append(f"What3Words: {coords['w3w']}")
         
-        # Add timezone
+        # Add timezone and current date/time
         timezone = profile.get("timezone", "UTC")
         context_parts.append(f"User timezone: {timezone}")
+        
+        # Add current date/time in user's timezone
+        try:
+            import pytz
+            tz = pytz.timezone(timezone)
+            current_time = datetime.now(tz)
+            context_parts.append(f"Current date/time: {current_time.strftime('%Y-%m-%d %I:%M %p %Z')}")
+        except Exception:
+            # Fallback to UTC if timezone conversion fails
+            current_time = datetime.now()
+            context_parts.append(f"Current date/time: {current_time.strftime('%Y-%m-%d %I:%M %p UTC')}")
         
         # Add weather station context if available and privacy allows
         if profile.get("privacy", {}).get("share_weather_station", True):

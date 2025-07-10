@@ -484,6 +484,101 @@ def get_home_weather(include_forecast: bool = True) -> str:
         return f"WeatherFlow error: {str(e)}"
 
 
+def get_what3words_address(address: str) -> str:
+    """
+    Convert a street address to a What3Words address
+    
+    Args:
+        address: Street address to convert (e.g., "317 N Beaumont Ave, Catonsville, MD")
+    
+    Returns:
+        What3Words address or error message
+    """
+    try:
+        import requests
+        import streamlit as st
+        
+        # Get API key
+        api_key = st.secrets.get("WHAT3WORDS_API_KEY")
+        if not api_key:
+            return "❌ What3Words API key not configured"
+        
+        # First, we need to geocode the address to get coordinates
+        # Using OpenStreetMap Nominatim for geocoding (free)
+        geocode_url = "https://nominatim.openstreetmap.org/search"
+        geocode_params = {
+            "q": address,
+            "format": "json",
+            "limit": 1
+        }
+        
+        # Add User-Agent header as required by Nominatim
+        headers = {
+            "User-Agent": "AI-Chat-MP/1.0 (https://github.com/ai-chat-mp)"
+        }
+        
+        geocode_response = requests.get(geocode_url, params=geocode_params, headers=headers, timeout=10)
+        
+        if geocode_response.status_code != 200:
+            return f"❌ Failed to geocode address: {address}"
+        
+        geocode_data = geocode_response.json()
+        if not geocode_data:
+            return f"❌ Address not found: {address}"
+        
+        # Extract coordinates
+        lat = float(geocode_data[0]["lat"])
+        lon = float(geocode_data[0]["lon"])
+        
+        # Now convert coordinates to What3Words
+        w3w_url = "https://api.what3words.com/v3/convert-to-3wa"
+        w3w_params = {
+            "coordinates": f"{lat},{lon}",
+            "key": api_key,
+            "format": "json"
+        }
+        
+        w3w_response = requests.get(w3w_url, params=w3w_params, timeout=10)
+        
+        if w3w_response.status_code == 200:
+            w3w_data = w3w_response.json()
+            
+            if "words" in w3w_data:
+                w3w_address = f"///{w3w_data['words']}"
+                
+                result = [f"📍 What3Words Address for: {address}"]
+                result.append(f"🌍 W3W: {w3w_address}")
+                result.append(f"📊 Coordinates: {lat:.4f}, {lon:.4f}")
+                
+                if "map" in w3w_data:
+                    result.append(f"🗺️  Map: {w3w_data['map']}")
+                
+                return "\n".join(result)
+            else:
+                return f"❌ No W3W address returned for coordinates: {lat}, {lon}"
+        
+        elif w3w_response.status_code == 402:
+            # API quota exceeded - provide fallback info
+            result = [f"📍 Address geocoded successfully: {address}"]
+            result.append(f"📊 Coordinates: {lat:.4f}, {lon:.4f}")
+            result.append(f"❌ What3Words API quota exceeded")
+            result.append(f"💡 To get W3W address:")
+            result.append(f"   1. Visit: https://map.what3words.com/{lat},{lon}")
+            result.append(f"   2. Or upgrade W3W API plan at: https://accounts.what3words.com/select-plan")
+            return "\n".join(result)
+        else:
+            error_data = w3w_response.json() if w3w_response.content else {}
+            error_msg = error_data.get("error", {}).get("message", "Unknown error")
+            return f"❌ What3Words API error: {error_msg}"
+            
+    except requests.exceptions.Timeout:
+        return "❌ Request timed out"
+    except requests.exceptions.RequestException as e:
+        return f"❌ Network error: {str(e)}"
+    except Exception as e:
+        return f"❌ Error: {str(e)}"
+
+
 def debug_weather_tools() -> str:
     """Debug function to test weather tools and show raw responses"""
     try:
@@ -664,6 +759,23 @@ tool_registry.register_tool(
     }
 )
 
+# Register W3W tool
+tool_registry.register_tool(
+    get_what3words_address,
+    "get_what3words_address",
+    "Convert any street address to a What3Words address (3 unique words that identify a precise 3m x 3m location). Use this when users ask for W3W addresses, precise location sharing, or emergency location identification.",
+    params_schema={
+        "type": "OBJECT",
+        "properties": {
+            "address": {
+                "type": "string",
+                "description": "Street address to convert (e.g., '317 N Beaumont Ave, Catonsville, MD' or 'Times Square, New York')"
+            }
+        },
+        "required": ["address"]
+    }
+)
+
 # Register debug tool
 tool_registry.register_tool(
     debug_weather_tools,
@@ -683,6 +795,7 @@ __all__ = [
     "get_weather_forecast",
     "get_pws_current_conditions",
     "get_home_weather",
+    "get_what3words_address",
     "debug_weather_tools",
     "tool_registry",
     "ToolRegistry",
